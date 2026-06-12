@@ -1,0 +1,4 @@
+# Test-time dependencies for the ZotWiki suite (contract.md: pytest >= 7.0).
+pytest>=7.0
+hypothesis
+pytest-httpserver

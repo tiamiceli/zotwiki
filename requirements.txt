@@ -1,0 +1,3 @@
+# ZotWiki runtime dependencies: none.
+# docs/contract.md mandates zero third-party runtime dependencies
+# (stdlib only: urllib.request for HTTP, json for JSON).
