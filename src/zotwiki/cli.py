@@ -12,7 +12,7 @@ and nothing to stdout (SS9.3).
 from __future__ import annotations
 
 import argparse
-import os
+import shutil
 import sys
 from pathlib import Path
 from typing import Sequence
@@ -21,7 +21,7 @@ from zotwiki.ask import ask
 from zotwiki.auditor import Auditor
 from zotwiki.compiler import Compiler
 from zotwiki.errors import VaultError, ZotWikiError, ZoteroUnavailableError
-from zotwiki.llm import AnthropicLLMClient, LLMClient
+from zotwiki.llm import ClaudeCodeLLMClient, LLMClient
 from zotwiki.publisher import VaultPublisher, parse_page
 from zotwiki.zotero import DEFAULT_BASE_URL, HTTPZoteroStore, ZoteroStore
 
@@ -176,11 +176,9 @@ def main(
 
     # SS9.4: construct the LLM only when needed and not injected.
     if llm is None and args.command in _NEEDS_LLM:
-        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-        model = os.environ.get("ZOTWIKI_MODEL", "")
-        if not api_key or not model:
-            return _fail(EXIT_ENV, "LLM not configured")
-        llm = AnthropicLLMClient(api_key, model)
+        if not shutil.which("claude"):
+            return _fail(EXIT_ENV, "claude not found")
+        llm = ClaudeCodeLLMClient()
 
     if store is None:
         store = HTTPZoteroStore(args.zotero_url)

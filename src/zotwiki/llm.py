@@ -8,15 +8,14 @@ from __future__ import annotations
 
 import json
 import re
-import urllib.request
 from typing import Protocol, runtime_checkable
 
-from zotwiki.errors import ArticleSchemaError
+from zotwiki.errors import ArticleSchemaError, ZotWikiError
 from zotwiki.models import Article, Claim, Contradiction, Quote, Section
 
 __all__ = [
     "LLMClient",
-    "AnthropicLLMClient",
+    "ClaudeCodeLLMClient",
     "parse_article_json",
     "article_to_json_dict",
 ]
@@ -29,48 +28,29 @@ class LLMClient(Protocol):
     def complete(self, prompt: str) -> str: ...
 
 
-_ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages"
-_ANTHROPIC_API_VERSION = "2023-06-01"
-_ANTHROPIC_MAX_TOKENS = 16000
+class ClaudeCodeLLMClient:
+    """Production `LLMClient`: shells out to the `claude` CLI via subprocess.
 
-
-class AnthropicLLMClient:
-    """Production `LLMClient`: stdlib-urllib client for the Anthropic
-    Messages API (contract SS5.1).
-
-    Never imported by the hermetic test suite.  No model id is hardcoded
-    anywhere -- the CLI passes `ZOTWIKI_MODEL` from the environment (SS9.4).
+    Never imported by the hermetic test suite (contract SS5.1).
     """
 
-    def __init__(self, api_key: str, model: str) -> None:
-        self._api_key = api_key
-        self._model = model
-
     def complete(self, prompt: str) -> str:
-        body = json.dumps(
-            {
-                "model": self._model,
-                "max_tokens": _ANTHROPIC_MAX_TOKENS,
-                "messages": [{"role": "user", "content": prompt}],
-            }
-        ).encode("utf-8")
-        request = urllib.request.Request(
-            _ANTHROPIC_MESSAGES_URL,
-            data=body,
-            headers={
-                "x-api-key": self._api_key,
-                "anthropic-version": _ANTHROPIC_API_VERSION,
-                "content-type": "application/json",
-            },
-            method="POST",
-        )
-        with urllib.request.urlopen(request) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-        return "".join(
-            block.get("text", "")
-            for block in payload.get("content", [])
-            if isinstance(block, dict) and block.get("type") == "text"
-        )
+        import subprocess
+        try:
+            result = subprocess.run(
+                ["claude", "--print"],
+                input=prompt.encode("utf-8"),
+                capture_output=True,
+            )
+        except FileNotFoundError:
+            raise ZotWikiError("claude not found") from None
+        if result.returncode != 0:
+            stderr = result.stderr.decode("utf-8", errors="replace").strip()
+            msg = f"claude exited {result.returncode}"
+            if stderr:
+                msg += f": {stderr[:200]}"
+            raise ZotWikiError(msg) from None
+        return result.stdout.decode("utf-8")
 
 
 _REQUIRED_KEYS = ("title", "summary", "sections", "claims", "links")
