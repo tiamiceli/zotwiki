@@ -29,6 +29,10 @@ class ZoteroUnavailableError(ZoteroError):
     """Zotero could not be reached after exhausting all retry attempts."""
 
 
+class CollectionNotFoundError(ZoteroError):
+    """No Zotero collection exists with the requested name."""
+
+
 class ArticleSchemaError(ZotWikiError):
     """Compiled-article JSON violates the contract SS5.2 schema."""
 

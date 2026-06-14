@@ -80,14 +80,17 @@ class FakeZotero:
     def __init__(self, server: HTTPServer) -> None:
         self.server = server
         self.items_path = BASE_PATH + "/items"
+        self.collections_path = BASE_PATH + "/collections"
         self.reset()
         server.expect_request(re.compile(r".*")).respond_with_handler(self._handle)
 
     # ----- per-test configuration ------------------------------------
 
     def reset(self) -> None:
-        self.items: dict[str, dict] = {}       # key -> SS4.4 item object
-        self.fulltext: dict[str, str] = {}     # key -> fulltext content
+        self.items: dict[str, dict] = {}                   # key -> SS4.4 item object
+        self.fulltext: dict[str, str] = {}                 # key -> fulltext content
+        self.collections: dict[str, dict] = {}             # key -> collection object
+        self.collection_members: dict[str, list[str]] = {} # collection key -> [item keys]
         self.requests: list[RecordedRequest] = []
         self.post_bodies: list = []            # parsed JSON bodies of POSTs
         self.created_keys: list[str] = []      # keys assigned by POST /items
@@ -131,6 +134,20 @@ class FakeZotero:
         if fulltext is not None:
             self.fulltext[key] = fulltext
         return key
+
+    def add_collection(self, name: str, key: str | None = None) -> str:
+        """Register a named collection; returns its key."""
+        key = key or "C" + self._unique_key()[:7]
+        self.collections[key] = {
+            "key": key, "version": 1,
+            "data": {"key": key, "name": name, "parentCollection": False},
+        }
+        self.collection_members[key] = []
+        return key
+
+    def add_item_to_collection(self, collection_key: str, item_key: str) -> None:
+        """Link an already-registered item to a collection."""
+        self.collection_members.setdefault(collection_key, []).append(item_key)
 
     def fail(self, times: int, *, status: int = 500,
              path: str | None = None, method: str | None = None) -> None:
@@ -230,6 +247,11 @@ class FakeZotero:
         m = re.fullmatch(re.escape(self.items_path) + r"/([^/]+)", rec.path)
         if m and rec.method == "GET":
             return self._serve_item(m.group(1))
+        if rec.path == self.collections_path and rec.method == "GET":
+            return _json_response(list(self.collections.values()))
+        m = re.fullmatch(re.escape(self.collections_path) + r"/([^/]+)/items", rec.path)
+        if m and rec.method == "GET":
+            return self._serve_collection_items(m.group(1))
         return Response("not found", status=404, content_type="text/plain")
 
     def _search(self, rec: RecordedRequest) -> Response:
@@ -269,6 +291,10 @@ class FakeZotero:
         if key not in self.fulltext:
             return Response("no fulltext", status=404, content_type="text/plain")
         return _json_response({"content": self.fulltext[key]})
+
+    def _serve_collection_items(self, collection_key: str) -> Response:
+        keys = self.collection_members.get(collection_key, [])
+        return _json_response([self.items[k] for k in keys if k in self.items])
 
     def _create(self, rec: RecordedRequest) -> Response:
         try:
