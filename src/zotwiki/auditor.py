@@ -24,7 +24,12 @@ from zotwiki.errors import (
     ZoteroUnavailableError,
 )
 from zotwiki.models import SourceItem, normalize_text
-from zotwiki.publisher import CONTRADICTIONS_FILENAME, INDEX_FILENAME, parse_page
+from zotwiki.publisher import (
+    CONTRADICTIONS_FILENAME,
+    INDEX_FILENAME,
+    _parse_frontmatter,
+    parse_page,
+)
 from zotwiki.zotero import ZoteroStore
 
 __all__ = ["Auditor", "AuditReport", "Violation", "AUDIT_CODES"]
@@ -57,86 +62,9 @@ class AuditReport:
         return self.violations == ()
 
 
-_DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 _WIKILINK_RE = re.compile(r"\[\[(.*?)\]\]")
 _INDEX_BULLET_RE = re.compile(r"- \[\[(.+)\]\]")
 _REFERENCE_CITEKEY_RE = re.compile(r"- \[@([A-Za-z0-9_.:\-]+)\] ")
-
-
-# ----- SS6.2 frontmatter (auditor's own strict reader) ---------------------
-
-
-def _parse_quoted_scalar(s: str, key: str) -> str:
-    """Parse a SS6.2 double-quoted scalar; only ``\\\\`` and ``\\"`` escapes."""
-    if len(s) < 2 or s[0] != '"':
-        raise PageParseError(f"frontmatter {key!r} value must be double-quoted")
-    out: list[str] = []
-    j = 1
-    while j < len(s):
-        c = s[j]
-        if c == "\\":
-            if j + 1 >= len(s) or s[j + 1] not in ('\\', '"'):
-                raise PageParseError(f"invalid escape in frontmatter {key!r}")
-            out.append(s[j + 1])
-            j += 2
-        elif c == '"':
-            if j != len(s) - 1:
-                raise PageParseError(
-                    f"trailing content after frontmatter {key!r} value"
-                )
-            return "".join(out)
-        else:
-            out.append(c)
-            j += 1
-    raise PageParseError(f"unterminated string in frontmatter {key!r}")
-
-
-def _parse_frontmatter(lines: list[str]) -> dict:
-    """Strict SS6.2 frontmatter: exact keys in exact order, nothing else."""
-
-    def line_at(j: int, what: str) -> str:
-        if j >= len(lines):
-            raise PageParseError(f"unexpected end of page ({what})")
-        return lines[j]
-
-    if line_at(0, "frontmatter opening") != "---":
-        raise PageParseError("page must open with a '---' frontmatter block")
-    if line_at(1, "zotwiki key") != "zotwiki: 1":
-        raise PageParseError("first frontmatter key must be exactly 'zotwiki: 1'")
-    i = 2
-    values: dict = {}
-    for key in ("title", "created", "updated"):
-        line = line_at(i, f"frontmatter key {key!r}")
-        prefix = f"{key}: "
-        if not line.startswith(prefix):
-            raise PageParseError(f"expected frontmatter key {key!r}, got {line!r}")
-        values[key] = _parse_quoted_scalar(line[len(prefix):], key)
-        i += 1
-    for key in ("created", "updated"):
-        if not _DATE_RE.fullmatch(values[key]):
-            raise PageParseError(f"frontmatter {key!r} must be a YYYY-MM-DD date")
-    for key in ("citekeys", "tags"):
-        line = line_at(i, f"frontmatter key {key!r}")
-        if line == f"{key}: []":
-            values[key] = []
-            i += 1
-        elif line == f"{key}:":
-            i += 1
-            items: list[str] = []
-            while i < len(lines) and lines[i].startswith("  - "):
-                items.append(_parse_quoted_scalar(lines[i][4:], key))
-                i += 1
-            if not items:
-                raise PageParseError(f"frontmatter {key!r} block list is empty")
-            values[key] = items
-        else:
-            raise PageParseError(
-                f"expected frontmatter key {key!r} in canonical list form, "
-                f"got {line!r}"
-            )
-    if line_at(i, "frontmatter closing") != "---":
-        raise PageParseError("frontmatter must close with '---'")
-    return values
 
 
 # ----- raw-text extraction helpers -----------------------------------------
@@ -201,7 +129,7 @@ class Auditor:
             try:
                 text = path.read_bytes().decode("utf-8")
                 article = parse_page(text)
-                frontmatter = _parse_frontmatter(text.split("\n"))
+                frontmatter, _ = _parse_frontmatter(text.split("\n"))
             except (PageParseError, UnicodeDecodeError) as exc:
                 # Check 1; unparseable pages skip checks 2-4 and 7 but still
                 # count for checks 5/6 by filename.
@@ -283,7 +211,7 @@ class Auditor:
             out.add(Violation("PAGE_UNPARSEABLE", INDEX_FILENAME, str(exc)))
             return out
         try:
-            _parse_frontmatter(text.split("\n"))
+            _parse_frontmatter(text.split("\n"))  # validation only; result discarded
         except PageParseError as exc:
             out.add(Violation("PAGE_UNPARSEABLE", INDEX_FILENAME, str(exc)))
 
@@ -316,7 +244,7 @@ class Auditor:
         path = self._vault / CONTRADICTIONS_FILENAME
         try:
             text = path.read_bytes().decode("utf-8")
-            _parse_frontmatter(text.split("\n"))
+            _parse_frontmatter(text.split("\n"))  # validation only; result discarded
         except (PageParseError, OSError, UnicodeDecodeError) as exc:
             out.add(Violation("PAGE_UNPARSEABLE", CONTRADICTIONS_FILENAME, str(exc)))
             return out
