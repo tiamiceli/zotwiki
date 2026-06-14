@@ -101,18 +101,16 @@ class HTTPZoteroStore:
         return self._map_item(obj)
 
     def fulltext(self, key: str) -> str:
-        payload = self._request_json(
-            self._item_path(key) + "/fulltext",
-            not_found=FulltextNotFoundError,
-        )
-        if not isinstance(payload, dict) or not isinstance(
-            payload.get("content"), str
-        ):
-            raise ZoteroError(
-                f"malformed fulltext response for {key!r}: "
-                "'content' must be a string"
-            )
-        return payload["content"]
+        try:
+            return self._fetch_fulltext(key)
+        except FulltextNotFoundError:
+            pass
+        for child_key in self._child_keys(key):
+            try:
+                return self._fetch_fulltext(child_key)
+            except FulltextNotFoundError:
+                continue
+        raise FulltextNotFoundError(f"no fulltext for {key!r} or its children")
 
     def resolve(self, citekey: str) -> SourceItem:
         results = self._search_raw(citekey, qmode="everything", limit=100)
@@ -283,16 +281,66 @@ class HTTPZoteroStore:
             has_fulltext=self._probe_fulltext(key),
         )
 
-    def _probe_fulltext(self, key: str) -> bool:
-        """SS4.5 probe: 200 -> True, 404 -> False; anything else per SS3.2."""
+    def _fetch_fulltext(self, key: str) -> str:
+        """Fetch fulltext for a single key; raises FulltextNotFoundError on 404."""
+        payload = self._request_json(
+            self._item_path(key) + "/fulltext",
+            not_found=FulltextNotFoundError,
+        )
+        if not isinstance(payload, dict) or not isinstance(
+            payload.get("content"), str
+        ):
+            raise ZoteroError(
+                f"malformed fulltext response for {key!r}: "
+                "'content' must be a string"
+            )
+        return payload["content"]
+
+    def _child_keys(self, key: str) -> list[str]:
+        """SS4.9: fetch child item keys for a parent key.
+
+        Returns a list of child key strings in server order.
+        404 from the endpoint is treated as an empty list.
+        Non-array response or element missing string 'key' raises ZoteroError.
+        """
         try:
-            self._request(
-                self._item_path(key) + "/fulltext",
+            payload = self._request_json(
+                self._item_path(key) + "/children",
+                query={"format": "json"},
                 not_found=FulltextNotFoundError,
             )
         except FulltextNotFoundError:
-            return False
-        return True
+            return []
+        if not isinstance(payload, list):
+            raise ZoteroError(
+                f"malformed children response for {key!r}: expected a JSON array"
+            )
+        keys: list[str] = []
+        for element in payload:
+            if not isinstance(element, dict) or not isinstance(
+                element.get("key"), str
+            ):
+                raise ZoteroError(
+                    f"malformed child object in children response for {key!r}: "
+                    "missing string 'key'"
+                )
+            keys.append(element["key"])
+        return keys
+
+    def _probe_fulltext(self, key: str) -> bool:
+        """SS4.5 two-step probe: parent first, then children on 404."""
+        try:
+            self._fetch_fulltext(key)
+            return True
+        except FulltextNotFoundError:
+            pass
+        for child_key in self._child_keys(key):
+            try:
+                self._fetch_fulltext(child_key)
+                return True
+            except FulltextNotFoundError:
+                continue
+        return False
 
     # ----- HTTP plumbing (contract SS3.2 retry policy) -------------------
 
