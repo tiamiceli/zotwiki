@@ -20,9 +20,10 @@ from typing import Sequence
 from zotwiki.ask import ask
 from zotwiki.auditor import Auditor
 from zotwiki.compiler import Compiler
-from zotwiki.errors import VaultError, ZotWikiError, ZoteroUnavailableError
+from zotwiki.errors import CollectionNotFoundError, VaultError, ZotWikiError, ZoteroUnavailableError
 from zotwiki.llm import ClaudeCodeLLMClient, LLMClient
 from zotwiki.publisher import VaultPublisher, parse_page
+from zotwiki.syncer import Syncer
 from zotwiki.zotero import DEFAULT_BASE_URL, HTTPZoteroStore, ZoteroStore
 
 __all__ = ["main", "EXIT_OK", "EXIT_FAIL", "EXIT_ENV"]
@@ -34,7 +35,7 @@ def run() -> None:
 
 EXIT_OK, EXIT_FAIL, EXIT_ENV = 0, 1, 2
 
-_NEEDS_LLM = ("compile", "ask")
+_NEEDS_LLM = ("compile", "ask", "sync")
 
 
 class _UsageError(Exception):
@@ -76,6 +77,13 @@ def _build_parser() -> argparse.ArgumentParser:
     ask_ = sub.add_parser("ask", help="answer a question from the vault")
     ask_.add_argument("--vault", required=True, metavar="DIR")
     ask_.add_argument("question", metavar="QUESTION")
+
+    sync_ = sub.add_parser("sync", help="sync a Zotero collection into the vault")
+    sync_.add_argument("--vault", required=True, metavar="DIR")
+    sync_.add_argument("--collection", required=True, metavar="NAME")
+    sync_.add_argument("--update", action="store_true",
+                       help="re-compile pages that already exist")
+    sync_.add_argument("--today", default=None, metavar="YYYY-MM-DD")
 
     return parser
 
@@ -154,6 +162,33 @@ def _cmd_audit(args: argparse.Namespace, store: ZoteroStore) -> int:
     return EXIT_FAIL
 
 
+def _cmd_sync(args: argparse.Namespace, store: ZoteroStore, llm: LLMClient) -> int:
+    vault = Path(args.vault)
+    if not vault.is_dir():
+        return _fail(EXIT_ENV, f"vault directory not found: {vault}")
+
+    def on_compiled(title: str, path: Path, contradictions: tuple) -> None:
+        sys.stdout.write(f"compiled\t{title}\t{path}\n")
+        if contradictions:
+            sys.stdout.write(f"contradictions\t{title}\t{len(contradictions)}\n")
+
+    def on_skipped(title: str) -> None:
+        sys.stdout.write(f"skipped\t{title}\n")
+
+    try:
+        report = Syncer(store, llm, vault, today=args.today).sync(
+            args.collection,
+            update=args.update,
+            on_compiled=on_compiled,
+            on_skipped=on_skipped,
+        )
+    except CollectionNotFoundError as exc:
+        return _fail(EXIT_ENV, exc)
+
+    sys.stdout.write(f"sync: {report.compiled} compiled, {report.skipped} skipped\n")
+    return EXIT_OK
+
+
 def _cmd_ask(args: argparse.Namespace, llm: LLMClient) -> int:
     answer = ask(Path(args.vault), args.question, llm)
     out = [answer.text, "\n\nSources:\n"]
@@ -195,6 +230,8 @@ def main(
             return _cmd_compile(args, store, llm)
         if args.command == "audit":
             return _cmd_audit(args, store)
+        if args.command == "sync":
+            return _cmd_sync(args, store, llm)
         return _cmd_ask(args, llm)
     except (ZoteroUnavailableError, VaultError) as exc:
         return _fail(EXIT_ENV, exc)

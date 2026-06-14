@@ -86,13 +86,14 @@ class FakeLLM:
 
     @staticmethod
     def _default_response(prompt: str) -> str:
-        import json
-        # Extract a title hint from the prompt (first quoted title-like word)
-        import re
-        m = re.search(r'"title":\s*"([^"]+)"', prompt)
-        title = m.group(1) if m else "Synthesized Article"
-        # find a citekey
-        ck_m = re.search(r'"citekey":\s*"([^"]+)"', prompt)
+        import json, re
+        # Compiler puts "title: X" (source item block) or '"title": "X"' (existing JSON)
+        m = re.search(r'^title: (.+)$', prompt, re.MULTILINE)
+        if not m:
+            m = re.search(r'"title":\s*"([^"]+)"', prompt)
+        title = m.group(1).strip() if m else "Synthesized Article"
+        # Compiler puts "citekey: xxx" (unquoted) in source item block
+        ck_m = re.search(r'^citekey: (\S+)$', prompt, re.MULTILINE)
         citekey = ck_m.group(1) if ck_m else "author2020word"
         return json.dumps({
             "title": title,

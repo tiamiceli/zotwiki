@@ -18,6 +18,7 @@ from typing import Protocol, runtime_checkable
 
 from zotwiki.errors import (
     CitekeyNotFoundError,
+    CollectionNotFoundError,
     FulltextNotFoundError,
     ItemNotFoundError,
     ZoteroError,
@@ -62,6 +63,7 @@ class ZoteroStore(Protocol):
         creators: Sequence[str] = (),
         year: int | None = None,
     ) -> SourceItem: ...
+    def collection_items(self, name: str) -> list[SourceItem]: ...
 
 
 class HTTPZoteroStore:
@@ -158,6 +160,31 @@ class HTTPZoteroStore:
                 "malformed create response: missing successful['0']"
             )
         return self._map_item(successful["0"])
+
+    def collection_items(self, name: str) -> list[SourceItem]:
+        collections = self._request_json(
+            "/collections",
+            query={"format": "json"},
+        )
+        if not isinstance(collections, list):
+            raise ZoteroError("malformed collections response: expected a JSON array")
+        col_key: str | None = None
+        for col in collections:
+            if not isinstance(col, dict):
+                raise ZoteroError("malformed collection object: not a JSON object")
+            data = col.get("data") or {}
+            if isinstance(data, dict) and data.get("name") == name:
+                col_key = col.get("key")
+                break
+        if col_key is None:
+            raise CollectionNotFoundError(f"collection {name!r} not found")
+        items = self._request_json(
+            f"/collections/{urllib.parse.quote(col_key, safe='')}/items",
+            query={"format": "json", "limit": 100},
+        )
+        if not isinstance(items, list):
+            raise ZoteroError("malformed collection items response: expected a JSON array")
+        return [self._map_item(obj) for obj in items]
 
     # ----- citekey generation (contract SS3.3) -------------------------
 
