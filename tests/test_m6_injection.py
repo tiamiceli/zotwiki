@@ -122,7 +122,7 @@ def test_req_038__compile_without_llm_config_returns_2_no_network(
     out = capsys.readouterr()
     assert rc == 2
     assert out.out == ""
-    assert out.err == "error: LLM not configured\n"  # SS9.4, byte-exact
+    assert out.err == "error: claude not found\n"  # SS9.4, byte-exact
     assert not list(vault.glob("*.md"))
     assert offline == []
 
@@ -138,7 +138,7 @@ def test_req_038__ask_without_llm_config_returns_2_no_network(
     out = capsys.readouterr()
     assert rc == 2
     assert out.out == ""
-    assert out.err == "error: LLM not configured\n"
+    assert out.err == "error: claude not found\n"
     assert offline == []
 
 
@@ -180,15 +180,12 @@ def test_req_038__injected_store_wins_over_zotero_url(offline, capsys):
     assert offline == []
 
 
-def test_req_038__env_sentinels_unused_when_llm_injected(
+def test_req_038__no_llm_construction_when_llm_injected(
     tmp_path, monkeypatch, capsys
 ):
-    """With llm= injected, ANTHROPIC_API_KEY/ZOTWIKI_MODEL must never be
-    acted on: the page content provably comes from the injected fake and no
-    socket is opened toward any API."""
+    """With llm= injected, no real LLM client is constructed: the page
+    content provably comes from the injected fake and no socket is opened."""
     attempts = install_network_guard(monkeypatch)
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-sentinel-do-not-use")
-    monkeypatch.setenv("ZOTWIKI_MODEL", "sentinel-model-do-not-use")
 
     store = InMemoryStore()
     [title] = distinct_titles(1)

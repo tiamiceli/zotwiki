@@ -257,9 +257,8 @@ def install_network_guard(monkeypatch) -> list:
 
 
 def clear_llm_env(monkeypatch) -> None:
-    """REQ-038's 'no environment variables' precondition."""
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.delenv("ZOTWIKI_MODEL", raising=False)
+    """REQ-038: make 'claude' unfindable on PATH (SS9.4 condition)."""
+    monkeypatch.setenv("PATH", "/no-such-directory-zotwiki-test")
 
 
 # ----- hand-rendered single-page vault (no zotwiki involved) -----------------
