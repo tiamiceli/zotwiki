@@ -1,184 +1,136 @@
-# ZotWiki — Plan v1.1 (Post-M6 Fix Phase)
+# ZotWiki — Plan v1.1 (Post-M6)
 
-Authorized by docs/rulings.md Ruling 2 (2026-06-13). These four tasks address
-implementation gaps identified by a post-M6 README audit. They are strictly
-ordered (T3 before T4; otherwise independent) and touch only production code
-— no test files are modified. All 295+ M1–M6 tests must remain green after
-every task.
+Authorized by docs/rulings.md Ruling 2 (2026-06-14). Addresses post-M6 gaps
+identified by planner review: the Anthropic API backend is replaced with a
+Claude Code backend (Phase A), followed by infrastructure and refactor cleanup
+(Phase B). Tester and coder discipline from plan.md applies throughout: in
+Phase A the tester writes tests before the coder writes code; in Phase B the
+existing test suite is the gate and no new tests are written.
 
----
-
-## T1 — Add `pyproject.toml` and installable entry point
-
-**Scope:** new `pyproject.toml` at repo root; one new function in
-`src/zotwiki/cli.py`.
-
-**Why:** the package cannot be installed with `pip install .` and the `zotwiki`
-command is not on PATH. Every invocation requires `PYTHONPATH=src python -m
-zotwiki`.
-
-**What to do:**
-
-1. Add `run()` to `src/zotwiki/cli.py` immediately after `main()`:
-
-   ```python
-   def run() -> None:
-       import sys
-       sys.exit(main())
-   ```
-
-   `run` is infrastructure only; it must not appear in `__all__`.
-
-2. Create `pyproject.toml` in the repo root (beside `pytest.ini`):
-
-   ```toml
-   [build-system]
-   requires = ["setuptools>=68"]
-   build-backend = "setuptools.backends.legacy:build"
-
-   [project]
-   name = "zotwiki"
-   version = "0.1.0"
-   requires-python = ">=3.12"
-   dependencies = []
-
-   [project.scripts]
-   zotwiki = "zotwiki.cli:run"
-
-   [tool.setuptools.packages.find]
-   where = ["src"]
-   ```
-
-**Done when:** `pip install -e .` succeeds, `zotwiki --help` prints usage
-from PATH, and all pre-existing tests still pass.
+Cross-milestone done-gate: all tests passing at the start of Phase A must
+still pass at the end of Phase B. The only tests that may be modified are
+those covering REQ-038 error behavior.
 
 ---
 
-## T2 — Wrap `AnthropicLLMClient.complete()` in HTTP error handling
+## Phase A — Replace LLM backend (TDD)
 
-**Scope:** `src/zotwiki/llm.py`, the `complete` method only.
+**Scope:** `src/zotwiki/llm.py`, `src/zotwiki/cli.py`, and the test covering
+REQ-038 error behavior. New test file `tests/test_m6_llm_client.py` for
+REQ-039.
 
-**Why:** `urllib.request.urlopen` raises `urllib.error.HTTPError`,
-`urllib.error.URLError`, or `OSError` on API failures. These bypass the CLI's
-`error: ...` formatter and produce raw Python tracebacks.
+**REQs:** REQ-038 (revised error behavior), REQ-039 (new).
 
-**What to do:**
+### Tester work (before coder starts)
 
-Replace the bare `urlopen` call in `AnthropicLLMClient.complete` with a
-try/except that converts every network and HTTP failure into `ZotWikiError`.
-Exact pattern:
+The tester owns REQ-038 and REQ-039 per contract §1 (blind from
+implementation). Before the coder changes any production code:
 
-```python
-import urllib.error
+1. **Revise the REQ-038 error-behavior test** in the existing CLI injection
+   test file. The error condition changes from "missing `ANTHROPIC_API_KEY` /
+   `ZOTWIKI_MODEL`" to "`claude` not on PATH". The test must confirm
+   `main(["compile", ...])` without an injected `llm` and with `claude`
+   absent from PATH returns 2 and prints `error: claude not found` to stderr.
 
-try:
-    with urllib.request.urlopen(request) as response:
-        payload = json.loads(response.read().decode("utf-8"))
-except urllib.error.HTTPError as exc:
-    raise ZotWikiError(
-        f"Anthropic API error: HTTP {exc.code} {exc.reason}"
-    ) from None
-except (urllib.error.URLError, OSError) as exc:
-    raise ZotWikiError(
-        f"Anthropic API unreachable: {exc}"
-    ) from None
-```
+2. **Write `tests/test_m6_llm_client.py`** covering REQ-039. The fake
+   `claude` binary is a tiny executable script placed in a `tmp_path`
+   directory prepended to `PATH` for the duration of the test. It reads
+   stdin and prints a canned response to stdout. Tests must cover:
+   - Successful call: prompt arrives on stdin, stdout is returned as-is.
+   - Non-zero exit code from `claude`: `ZotWikiError` is raised, message
+     includes the exit code.
+   - `claude` not on PATH: `ZotWikiError` is raised with message
+     `"claude not found"`.
 
-`ZotWikiError` is already imported in `llm.py` via `zotwiki.errors`.
+   The fake binary must be hermetic: it runs on `127.0.0.1` only and makes
+   no real network calls.
 
-Constraints:
-- The error message must be single-line (Ruling 2 condition d).
-- Do not catch `ValueError` from `json.loads` — a malformed response body is
-  a different failure and should surface as-is (it will be caught by the CLI's
-  general exception handler as an unexpected error, which is acceptable).
-- `urllib.error` is already used elsewhere in the codebase; no new import of
-  a third-party package is introduced.
+**Done when:** both revised and new tests fail (red) because the production
+code has not yet changed. This is the mandatory red gate before coder starts.
 
-**Done when:** all pre-existing tests still pass. (No new tests are required;
-`AnthropicLLMClient` is never imported by the hermetic suite, per Ruling 2.)
+### Coder work (after tester's red gate)
+
+From `src/zotwiki/llm.py` and `src/zotwiki/cli.py` only, working from
+contract §5.1 and §9.4:
+
+1. **Delete `AnthropicLLMClient`** and all `ANTHROPIC_*` constants from
+   `llm.py`. Remove `urllib.request` imports that are no longer used.
+
+2. **Add `ClaudeCodeLLMClient`** to `llm.py`. It implements `LLMClient`.
+   Uses only stdlib (`subprocess`, `shutil`). Passes the prompt via stdin
+   to `claude -p -` and returns stdout as a string. Raises `ZotWikiError`
+   on non-zero exit or if `claude` is not on PATH. Error messages must be
+   single-line.
+
+3. **Update `cli.py` §9.4 logic**: replace the `ANTHROPIC_API_KEY` /
+   `ZOTWIKI_MODEL` env-var check with a PATH check for `claude`. Construct
+   `ClaudeCodeLLMClient()` when no `llm` is injected and the command needs
+   one.
+
+4. **Update `__all__` in `llm.py`**: remove `AnthropicLLMClient`, add
+   `ClaudeCodeLLMClient`.
+
+**Done when:** all previously passing tests still pass and the new REQ-039
+tests pass (green).
 
 ---
 
-## T3 — Deduplicate `_parse_frontmatter` (auditor imports from publisher)
+## Phase B — Infrastructure and refactors
+
+No new REQs. No new tests. Existing passing tests are the sole gate after
+each task. Tasks are ordered; complete each fully before starting the next.
+
+### B-T1 — Add `pyproject.toml` and installable entry point
+
+**Scope:** new `pyproject.toml` at repo root; `src/zotwiki/cli.py`.
+
+**Why:** no `pyproject.toml` means `pip install .` fails and `zotwiki` is not
+available on PATH. Users must prefix every invocation with `PYTHONPATH=src`.
+
+Add a `run()` function to `cli.py` (not in `__all__`) that calls
+`sys.exit(main())`. This is the entry point target; it keeps `main()`'s
+contract (returns int, never calls `sys.exit`) intact.
+
+Create `pyproject.toml` at the repo root declaring the package, Python ≥ 3.12,
+zero runtime dependencies, and `zotwiki = "zotwiki.cli:run"` as the console
+script entry point. Use `setuptools` as the build backend with `where = ["src"]`
+package discovery.
+
+**Done when:** `pip install -e .` succeeds, `zotwiki --help` runs from PATH,
+all existing tests still pass.
+
+### B-T3 — Deduplicate `_parse_frontmatter`
 
 **Scope:** `src/zotwiki/auditor.py` only.
 
 **Why:** `auditor.py` contains a near-identical copy of `_parse_frontmatter`
-that diverges from the canonical version in `publisher.py`. Two copies must be
-kept in sync by hand.
+from `publisher.py`. The publisher's version is canonical (returns
+`tuple[dict, int]`); the auditor's copy (returns `dict`) diverges and must
+be kept in sync by hand.
 
-**Decision (Ruling 2 §2-T3):** the publisher's version is canonical. It
-returns `tuple[dict, int]` where the int is the line index immediately after
-the closing `---`. Auditor callers that need only the dict ignore `_`.
+Delete the local `_parse_frontmatter` (and its helper `_parse_quoted_scalar`
+if not used elsewhere in `auditor.py`) from `auditor.py`. Import
+`_parse_frontmatter` from `zotwiki.publisher`. Update every call site in
+`auditor.py` to unpack the tuple and discard the line index.
 
-**What to do:**
+**Done when:** `auditor.py` contains no local definition of
+`_parse_frontmatter` and all existing tests still pass.
 
-1. Delete the local `_parse_frontmatter` function from `auditor.py` (the
-   function body beginning at the line `def _parse_frontmatter(lines: list[str]) -> dict:`
-   and its helper `_parse_quoted_scalar`).
+### B-T4 — Remove `ask.py` cross-module private imports
 
-2. Add an import at the top of `auditor.py`:
+**Scope:** `src/zotwiki/ask.py` only. **Must follow B-T3.**
 
-   ```python
-   from zotwiki.publisher import _parse_frontmatter, _parse_quoted_scalar
-   ```
+**Why:** `ask.py` imports `_strip_fence` from `zotwiki.llm` — a private
+helper not in the public surface of §1.1. After B-T3, the `_parse_frontmatter`
+import already points to the correct module; the remaining issue is
+`_strip_fence`.
 
-   Or, if `_parse_quoted_scalar` is not called directly by `auditor.py`
-   outside of `_parse_frontmatter`, import only `_parse_frontmatter`.
+Copy the `_strip_fence` logic into `ask.py` as a module-local function
+(identical behavior, no import from `llm`). Remove the `from zotwiki.llm
+import _strip_fence` line.
 
-3. Update every call site in `auditor.py` from `_parse_frontmatter(lines)`
-   (which returned `dict`) to `_parse_frontmatter(lines)[0]` (to discard the
-   line index). There are three call sites: in `_audit_index`,
-   `_audit_contradictions`, and `audit` itself.
+After this task, `ask.py` must contain no `from zotwiki.<module> import _*`
+lines.
 
-**Done when:** all pre-existing tests still pass and `auditor.py` contains no
-local definition of `_parse_frontmatter`.
-
----
-
-## T4 — Remove `ask.py`'s cross-module private imports
-
-**Scope:** `src/zotwiki/ask.py` only.
-
-**Must follow T3.**
-
-**Why:** `ask.py` imports two underscore-prefixed helpers from sibling modules,
-coupling it to private implementation details. After T3, one of those imports
-(`_parse_frontmatter` from `publisher.py`) is already in the right place; the
-remaining issue is `_strip_fence` from `llm.py`.
-
-**What to do:**
-
-1. Remove the import of `_strip_fence` from `zotwiki.llm` in `ask.py`.
-
-2. Inline the logic as a module-local function at the top of `ask.py`:
-
-   ```python
-   def _strip_fence(text: str) -> str:
-       stripped = text.strip()
-       if stripped.startswith("```") and stripped.endswith("```"):
-           lines = stripped.split("\n")
-           stripped = "\n".join(lines[1:-1])
-       return stripped
-   ```
-
-   This is a verbatim copy of the function from `llm.py`; no behavior change.
-
-3. The `_parse_frontmatter` import in `ask.py` already points to
-   `zotwiki.publisher` — verify it remains correct after T3. No change needed
-   to that import line.
-
-4. After T3+T4, `ask.py` must contain no `from zotwiki.llm import _*` or
-   `from zotwiki.publisher import _*` lines that refer to names not also
-   exported in `__all__` of those modules.
-
-**Done when:** all pre-existing tests still pass and `ask.py` carries no
+**Done when:** all existing tests still pass and `ask.py` carries no
 underscore imports from sibling modules.
-
----
-
-## Done-gate (all tasks)
-
-`pytest` from the repo root must exit 0 with the same number of collected
-tests as before T1. No test may be added, removed, or modified as part of
-this fix phase.

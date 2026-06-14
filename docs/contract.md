@@ -375,10 +375,10 @@ class LLMClient(Protocol):
 One method, one string in, one string out. Tests implement this with canned
 returns and optional prompt recording.
 
-Production: `zotwiki.llm.AnthropicLLMClient(api_key: str, model: str)` —
-stdlib-`urllib` client for the Anthropic Messages API. DECISION: no model id
-is hardcoded anywhere; the CLI reads `ANTHROPIC_API_KEY` and `ZOTWIKI_MODEL`
-from the environment (§9.4). This class is **never** imported by any test
+Production: `zotwiki.llm.ClaudeCodeLLMClient()` — shells out to the `claude`
+CLI (Claude Code) via `subprocess` (stdlib). DECISION: no API key or model
+configuration is required; the CLI uses the user's existing Claude Code
+installation and session (§9.4). This class is **never** imported by any test
 and is out of audit scope for the hermetic suite.
 
 ### 5.2 Compiled-article JSON schema (exact)
@@ -892,10 +892,9 @@ Every nonzero exit except audit-violations prints exactly one line
 
 ### 9.4 LLM construction (only when `llm is None` and the command needs one)
 
-`compile` and `ask` need an LLM. If not injected: read `ANTHROPIC_API_KEY`
-and `ZOTWIKI_MODEL` from the environment; if either is missing/empty →
-`error: LLM not configured` on stderr, exit 2, no network. `ingest` and
-`audit` never construct an LLM.
+`compile` and `ask` need an LLM. If not injected: verify that `claude` is
+available on PATH; if not found → `error: claude not found` on stderr, exit 2,
+no subprocess spawned. `ingest` and `audit` never construct an LLM.
 
 ### 9.5 `zotwiki.ask`
 

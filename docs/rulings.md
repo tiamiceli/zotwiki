@@ -51,66 +51,52 @@ may mark REQ-020/022/031 green at M5.
 
 ---
 
-## Ruling 2 — Post-M6 fix phase authorized (plan-v1.1.md)
+## Ruling 2 — LLM backend replaced; plan-v1.1.md authorized
 
-**Date:** 2026-06-13 · **Scope:** post-M6 maintenance · **Status:** binding.
+**Date:** 2026-06-14 · **Scope:** post-M6 · **Status:** binding.
 
-**1. Disposition: four implementation gaps identified by README audit are
-authorized as plan-v1.1.md tasks T1–T4.**
+**1. Disposition: `AnthropicLLMClient` is removed; `ClaudeCodeLLMClient` is
+the sole production LLM implementation.**
 
-A planner review of the completed M1–M6 codebase surfaced four gaps not
-covered by any REQ in requirements.md §A–G but material to real-world
-usability and internal correctness. None invalidates an existing green test;
-all are below-the-contract quality issues or missing packaging infrastructure.
-The fix phase is scoped to exactly these four tasks; no new REQs are added
-to requirements.md (the contract §1.1 public surface is unchanged).
+A post-M6 review found that the Anthropic API backend (`AnthropicLLMClient`,
+`ANTHROPIC_API_KEY`, `ZOTWIKI_MODEL`) is the wrong default for a tool built
+around Claude Code: it requires a separate paid API account, separate
+credentials, and separate error handling. The Claude Code CLI (`claude`)
+is already present in the user's environment and handles auth transparently.
+Removing the API backend simplifies the contract, eliminates a class of
+runtime errors, and makes ZotWiki usable without additional setup.
 
-**2. Gap inventory and decisions:**
+**2. Contract and requirements changes (binding):**
 
-- **T1 — No installable entry point.** There is no `pyproject.toml`; the CLI
-  can only be invoked via `PYTHONPATH=src python -m zotwiki`. Fix: add a
-  minimal `pyproject.toml` with a `[project.scripts]` entry. A thin
-  `run()` wrapper in `cli.py` shall call `sys.exit(main())` and serve as the
-  entry point target so the existing `main()` contract (returns int, never
-  calls `sys.exit`) remains intact.
+- contract.md §5.1: `AnthropicLLMClient` paragraph replaced with
+  `ClaudeCodeLLMClient` paragraph. `ANTHROPIC_API_KEY` and `ZOTWIKI_MODEL`
+  are no longer referenced anywhere in the contract.
+- contract.md §9.4: env-var check replaced with PATH check for `claude`.
+  Missing `claude` → `error: claude not found`, exit 2.
+- requirements.md REQ-038 error behavior revised: "missing API key" →
+  "`claude` not on PATH". The tester must update the existing test accordingly.
+- requirements.md REQ-039 added: `ClaudeCodeLLMClient` behavior under success
+  and failure, tested hermetically with a fake `claude` binary on PATH.
 
-- **T2 — `AnthropicLLMClient` swallows HTTP errors as raw tracebacks.**
-  `urllib.request.urlopen` in `llm.py` is unwrapped; HTTP 4xx/5xx,
-  connection errors, and timeouts surface as raw Python exceptions that
-  bypass the CLI's `error: ...` formatting. Fix: wrap the call in a
-  try/except covering `urllib.error.HTTPError`, `urllib.error.URLError`,
-  and `OSError`; re-raise as `ZotWikiError` with a clean human-readable
-  message. Decision: `ZotWikiError` (not a Zotero subclass) is the correct
-  type; the CLI already catches it as a domain failure (exit 1 via the
-  `except ZotWikiError` branch). The hermetic test suite never imports
-  `AnthropicLLMClient`; no test changes are required.
+**3. plan-v1.1.md is authorized with two phases:**
 
-- **T3 — `_parse_frontmatter` is duplicated.** Nearly-identical
-  implementations exist in `publisher.py` (returns `tuple[dict, int]`) and
-  `auditor.py` (returns `dict`). Decision: the publisher's two-return-value
-  version is canonical (callers that need only the dict ignore `_`).
-  `auditor.py`'s local copy is deleted; `auditor.py` imports the function
-  from `publisher`. The import of a private symbol across modules is accepted
-  as an internal convention (contract §1.1 enumerates the *public* surface
-  only; intra-package private imports are implementation details).
+- **Phase A (TDD):** tester revises REQ-038 test and writes REQ-039 test
+  (fake `claude` binary) before the coder touches any code. Coder deletes
+  `AnthropicLLMClient`, adds `ClaudeCodeLLMClient`, updates `cli.py`.
+- **Phase B (refactors, no new REQs):** T1 (`pyproject.toml`), T3
+  (deduplicate `_parse_frontmatter`), T4 (remove `ask.py` private imports).
+  Existing passing tests are the sole gate for Phase B.
 
-- **T4 — `ask.py` imports two private helpers from sibling modules.**
-  `_parse_frontmatter` from `publisher.py` is resolved by T3 (the import
-  already points to the right module; no change needed there). `_strip_fence`
-  from `llm.py` is used only to tolerate code-fenced LLM output; it is small
-  enough to inline directly in `ask.py` as a module-local helper, severing
-  the cross-module private dependency. After T3+T4, `ask.py` carries no
-  underscore imports from sibling modules.
+**4. Conditions (binding):**
 
-**3. Conditions (binding):**
-
-- (a) **All 295+ passing tests must remain green** after every task. No
-  existing test may be weakened or deleted to achieve a pass.
-- (b) **No contract surface changes.** The §1.1 public import surface, the
-  §5–§9 wire formats, and the exit-code table of §9.3 are frozen.
-  `run()` added by T1 is not added to §1.1 (it is infrastructure, not API).
-- (c) **T3 before T4.** `auditor.py` must import from `publisher.py` before
-  `ask.py`'s `_parse_frontmatter` import is evaluated as resolved.
-- (d) **T2 error messages must be single-line.** The CLI contract §9.3
-  requires exactly one `error: {message}` line on stderr per failure; the
-  `ZotWikiError` message raised by T2 must not contain embedded newlines.
+- (a) All tests passing at the start of Phase A must remain passing at the
+  end of Phase B. The only tests that may change are those directly testing
+  REQ-038 behavior (to reflect the revised error condition).
+- (b) `ClaudeCodeLLMClient` must use only stdlib (`subprocess`, `shutil`).
+  No new runtime dependencies are introduced.
+- (c) The `LLMClient` protocol (contract §5.1) and the injection seam
+  (`main(store=, llm=)`) are unchanged. All existing fake-LLM tests remain
+  valid without modification.
+- (d) Phase B tasks are pure refactors: no observable behavior changes, no
+  contract surface changes. If any Phase B task would require a contract
+  amendment, it must be raised as a new ruling before proceeding.

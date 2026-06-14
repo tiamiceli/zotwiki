@@ -417,9 +417,19 @@ stderr (audit violations excepted: they go to stdout per REQ-035).
 **Then** no real adapter or LLM client is constructed and no connection is
 attempted to any host other than what the injected fakes do.
 **Error behavior:** `main(["compile", ...])` without an injected `llm` and
-without `ANTHROPIC_API_KEY`/`ZOTWIKI_MODEL` set → return 2 with `error:` on
-stderr.
+with `claude` not on PATH → return 2 with `error: claude not found` on stderr.
+
+### REQ-039 — `ClaudeCodeLLMClient` calls `claude -p` and handles failures
+**Given** a fake `claude` binary on PATH that reads a prompt from stdin and
+prints a valid article JSON to stdout with exit code 0,
+**When** `ClaudeCodeLLMClient().complete(prompt)` is called,
+**Then** the fake binary is invoked, the full prompt is passed via stdin, and
+the returned string equals exactly what the fake printed to stdout.
+**Error behavior:** if `claude` exits with a non-zero return code →
+`ZotWikiError` is raised with a single-line message including the exit code
+and any stderr output; if `claude` is not found on PATH → `ZotWikiError` is
+raised with the message `"claude not found"`.
 
 ---
 
-Total: 38 requirements (REQ-001 … REQ-038).
+Total: 39 requirements (REQ-001 … REQ-039).
