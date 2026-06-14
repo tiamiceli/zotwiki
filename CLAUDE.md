@@ -17,13 +17,14 @@ zotwiki/
 │   ├── publisher.py      # VaultPublisher: Article → .md files
 │   ├── auditor.py        # Auditor: vault → AuditReport
 │   ├── ask.py            # ask(): question + vault → Answer
+│   ├── syncer.py         # Syncer: collection → vault sync
 │   └── cli.py            # main() entry point; run() for pyproject.toml
 ├── tests/                # tester-owned; coder never writes here
 ├── docs/
 │   ├── contract.md       # binding wire/file/behavior spec (exhaustive)
 │   ├── requirements.md   # one observable REQ per behavior
 │   ├── rulings.md        # planner decisions; override contract where noted
-│   ├── plan-sync.md      # active plan (sync subcommand, REQ-040–044)
+│   ├── plan-sync.md      # completed plan (sync subcommand, REQ-040–044)
 │   └── plan-v1.1.md      # completed plan (ClaudeCodeLLMClient, refactors)
 └── pyproject.toml        # setuptools build; [project.scripts] zotwiki = cli:run
 ```
@@ -116,18 +117,18 @@ ZotWikiError
 │   ├── ItemNotFoundError
 │   ├── CitekeyNotFoundError
 │   ├── FulltextNotFoundError
-│   └── CollectionNotFoundError  # (added by plan-sync.md)
+│   └── CollectionNotFoundError  # no collection with requested name
 ├── ArticleSchemaError            # bad LLM JSON output
 └── PageParseError / VaultError   # vault file problems
 ```
 
 ---
 
-## Active work
+## Current status
 
-**`docs/plan-sync.md`** is the current plan. It adds the `sync` subcommand (REQ-040–044, Ruling 3). Status: planned, not yet implemented.
+All planned work is complete. The implemented subcommands are `ingest`, `compile`, `audit`, `ask`, and `sync`. 44 requirements are green (REQ-001–REQ-044); one pre-existing test failure (`test_req_019`) is a known macOS case-collision limitation.
 
-Next step: tester phase — write red tests for REQ-040–044 in `tests/test_sync_store.py` and `tests/test_sync_cli.py`, confirm they fail, then commit before coder phase begins.
+To start new work: write a ruling in `docs/rulings.md`, update `docs/contract.md` and `docs/requirements.md`, then follow the planner → tester → coder sequence.
 
 ---
 

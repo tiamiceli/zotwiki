@@ -17,7 +17,7 @@ ZotWiki is a CLI tool that compiles a Zotero research library into an Obsidian-c
 ### sync — compile all new items in a Zotero collection  *(primary workflow)*
 
 ```
-zotwiki sync --vault DIR --collection NAME [--update]
+zotwiki sync --vault DIR --collection NAME [--update] [--today YYYY-MM-DD]
 ```
 
 - Finds the Zotero collection named `NAME` (case-sensitive).

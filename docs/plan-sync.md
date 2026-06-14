@@ -1,5 +1,7 @@
 # ZotWiki — sync subcommand plan
 
+**Status: completed** (REQ-040–044 green, all commits merged to main).
+
 ## Goal
 
 Add `zotwiki sync --vault DIR --collection NAME [--update]` as the primary user-facing workflow. The human adds papers to a named Zotero collection; one `sync` call compiles all new items into the vault, skipping pages that already exist (unless `--update` is given).

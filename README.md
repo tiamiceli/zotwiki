@@ -38,6 +38,12 @@ cd zotwiki
 uv tool install .
 ```
 
+To update after pulling new changes:
+
+```bash
+uv tool install . --reinstall
+```
+
 ---
 
 ## How to use ZotWiki
@@ -48,19 +54,27 @@ ZotWiki is designed to be driven by Claude Code. You work in Zotero and Obsidian
 
 In Zotero, create a collection (folder) for the papers you want in your wiki — for example, **"AI Papers"**. Add papers to it by dragging PDFs in, using the Zotero browser connector, or asking Claude Code to run `zotwiki ingest`.
 
-### 2. Create your vault
+### 2. Point to your vault
 
-Create an empty directory for your wiki pages:
+The vault is just a directory of `.md` files. You can use:
+
+- An **existing Obsidian vault** (or a subfolder of one) — ZotWiki writes standard Markdown that Obsidian reads natively.
+- A **new empty directory** if you're starting fresh.
+
+If your vault lives inside an iCloud-synced Obsidian vault, use the full path:
 
 ```bash
-mkdir -p ~/research/wiki
+# Example — adjust to your actual vault path
+VAULT="/Users/yourname/Library/Mobile Documents/iCloud~md~obsidian/Documents/MyVault/Research"
 ```
+
+Paths with spaces or emoji must be quoted in the shell. When you ask Claude Code to sync, just describe the path in plain language and it will handle the quoting.
 
 ### 3. Sync with Claude Code
 
-Open Claude Code in your research project directory and ask it to sync:
+Open Claude Code and ask it to sync — describe your collection name and vault path in plain language:
 
-> "Sync my wiki from the 'AI Papers' Zotero collection into ./wiki"
+> "Sync my wiki from the 'AI Papers' Zotero collection into my Research vault"
 
 Claude Code will run `zotwiki sync`, compile each paper into a wiki page, and report what was added.
 
