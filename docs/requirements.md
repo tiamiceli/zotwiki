@@ -432,4 +432,54 @@ raised with the message `"claude not found"`.
 
 ---
 
-Total: 39 requirements (REQ-001 … REQ-039).
+## H. Syncer and sync subcommand
+
+### REQ-040 — `collection_items` returns mapped items from a named collection
+**Given** the fake Zotero server exposes two collections ("AI Papers" with key
+`COL00001` holding two items, and "Other" with key `COL00002` holding none),
+**When** `store.collection_items("AI Papers")` is called,
+**Then** it returns a `list[SourceItem]` of length 2 in server order, each
+mapped per contract §3.1 (citekeys, titles, has_fulltext probes, etc.).
+**Error behavior:** `store.collection_items("Nonexistent")` raises
+`CollectionNotFoundError`; Zotero unreachable → `ZoteroUnavailableError`.
+
+### REQ-041 — sync compiles new items and skips existing pages
+**Given** a vault with one existing page (`Transformer.md` for an item with
+citekey `vaswani2017attention`) and a collection containing that item plus one
+new item (citekey `devlin2019bert`, title `BERT`),
+**When** `main(["sync", "--vault", v, "--collection", "AI Papers"], store=fake, llm=fakelLm)`
+is called,
+**Then** exit 0; stdout contains `compiled\tBERT\t{path}\n`,
+`skipped\tTransformer\n`, and `sync: 1 compiled, 1 skipped\n` (in that order,
+summary always last).
+**Error behavior:** vault directory missing → return 2.
+
+### REQ-042 — sync with --update re-compiles existing pages
+**Given** the same vault and collection as REQ-041,
+**When** `main(["sync", "--vault", v, "--collection", "AI Papers", "--update"], ...)`
+is called,
+**Then** exit 0; stdout contains two `compiled\t...\n` lines (one per item) and
+`sync: 2 compiled, 0 skipped\n`; `Transformer.md` is overwritten with the
+LLM's output.
+**Error behavior:** same as REQ-041.
+
+### REQ-043 — collection not found exits 2
+**Given** a fake store where no collection is named `"Nonexistent"`,
+**When** `main(["sync", "--vault", v, "--collection", "Nonexistent"], store=fake, llm=fakellm)`
+is called,
+**Then** exit 2; stderr is exactly `error: collection 'Nonexistent' not found\n`.
+**Error behavior:** this REQ is the error behavior.
+
+### REQ-044 — items without citekeys are skipped silently
+**Given** a collection containing one item with a citekey and one with an
+empty Extra field (no citekey),
+**When** `main(["sync", "--vault", v, "--collection", "AI Papers"], ...)`
+is called,
+**Then** exit 0; the citekey-less item produces no stdout line (neither
+`compiled` nor `skipped`); the summary is `sync: 1 compiled, 0 skipped\n`
+(the no-citekey item is absent from both totals).
+**Error behavior:** none.
+
+---
+
+Total: 44 requirements (REQ-001 … REQ-044).

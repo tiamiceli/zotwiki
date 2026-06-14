@@ -35,6 +35,7 @@ zotwiki/                      (repo root = /mnt/e/test/zotwiki)
 │       ├── publisher.py
 │       ├── auditor.py
 │       ├── ask.py
+│       ├── syncer.py
 │       └── cli.py
 └── tests/                    (tester-owned; coder never writes here)
 ```
@@ -57,15 +58,16 @@ install needed.
 from zotwiki import __version__
 
 from zotwiki.errors import (
-    ZotWikiError,            # base, subclasses Exception
-    ZoteroError,             # subclasses ZotWikiError
-    ItemNotFoundError,       # subclasses ZoteroError
-    CitekeyNotFoundError,    # subclasses ZoteroError
-    FulltextNotFoundError,   # subclasses ZoteroError
-    ZoteroUnavailableError,  # subclasses ZoteroError
-    ArticleSchemaError,      # subclasses ZotWikiError
-    PageParseError,          # subclasses ZotWikiError
-    VaultError,              # subclasses ZotWikiError
+    ZotWikiError,              # base, subclasses Exception
+    ZoteroError,               # subclasses ZotWikiError
+    ItemNotFoundError,         # subclasses ZoteroError
+    CitekeyNotFoundError,      # subclasses ZoteroError
+    FulltextNotFoundError,     # subclasses ZoteroError
+    ZoteroUnavailableError,    # subclasses ZoteroError
+    CollectionNotFoundError,   # subclasses ZoteroError
+    ArticleSchemaError,        # subclasses ZotWikiError
+    PageParseError,            # subclasses ZotWikiError
+    VaultError,                # subclasses ZotWikiError
 )
 
 from zotwiki.models import (
@@ -87,6 +89,8 @@ from zotwiki.publisher import (
 from zotwiki.auditor import Auditor, AuditReport, Violation, AUDIT_CODES
 
 from zotwiki.ask import ask, Answer, SourceRef
+
+from zotwiki.syncer import Syncer, SyncReport
 
 from zotwiki.cli import main, EXIT_OK, EXIT_FAIL, EXIT_ENV
 ```
@@ -179,6 +183,7 @@ class ZoteroStore(Protocol):
         creators: Sequence[str] = (),
         year: int | None = None,
     ) -> SourceItem: ...
+    def collection_items(self, name: str) -> list[SourceItem]: ...
 ```
 
 Semantics (binding for fakes and the real adapter alike):
@@ -190,6 +195,7 @@ Semantics (binding for fakes and the real adapter alike):
 | `fulltext` | the full text string | `FulltextNotFoundError` (no fulltext or unknown key); `ZoteroUnavailableError`; `ZoteroError` |
 | `resolve` | first item whose parsed citekey equals the argument exactly | `CitekeyNotFoundError`; `ZoteroUnavailableError`; `ZoteroError` |
 | `add` | the created item (with generated citekey) | `ZoteroError` (server reported failure, or citekey suffixes exhausted); `ZoteroUnavailableError` |
+| `collection_items` | list of items in the named collection (possibly empty), in server order, each mapped per §3.1 | `CollectionNotFoundError` (no collection with that exact name); `ZoteroUnavailableError`; `ZoteroError` |
 
 ### 3.1 Mapping Zotero JSON → `SourceItem`
 
@@ -325,6 +331,22 @@ absent; the adapter treats absent as empty (§3.1).
 `has_fulltext` is defined operationally: `GET {base}/items/{KEY}/fulltext`
 returns 200 ⇔ `has_fulltext is True`. The fake server decides per item
 whether to serve fulltext.
+
+### 4.7 `GET {base}/collections?format=json`
+
+Returns a JSON **array** of collection objects. Each has the shape:
+
+```json
+{"key": "COL00001", "version": 1, "data": {"key": "COL00001", "name": "AI Papers", "parentCollection": false}}
+```
+
+The adapter reads only `key` and `data.name`. The fake returns all registered collections in insertion order.
+
+### 4.8 `GET {base}/collections/{KEY}/items?format=json&limit=100`
+
+Returns a JSON **array** of item objects (same shape as §4.4) for all items in the collection. The adapter always sends `limit=100`. The fake returns items in insertion order (same limit is sent; the fake need not enforce it).
+
+---
 
 ### 4.6 `POST {base}/items`
 
@@ -851,6 +873,7 @@ zotwiki ingest  --title TITLE [--url URL] [--creator NAME]... [--year YEAR] [--t
 zotwiki compile --vault DIR (--key KEY ... | --query QUERY) [--limit N] [--page TITLE] [--today YYYY-MM-DD]
 zotwiki audit   --vault DIR
 zotwiki ask     --vault DIR QUESTION
+zotwiki sync    --vault DIR --collection NAME [--update]
 ```
 
 **ingest** — `store.add(...)` (`--type` → `item_type`, default `webpage`).
@@ -885,16 +908,68 @@ of its citekeys: `"- [[{page}]] [@{citekey}]\n"`. Exit 0.
 |---|---|---|
 | 0 | success | — |
 | 1 | domain failure | `ArticleSchemaError`, `ItemNotFoundError`, `CitekeyNotFoundError`, `FulltextNotFoundError`, `PageParseError`, audit violations, zero compile items, `--page` title mismatch |
-| 2 | environment failure | `ZoteroUnavailableError`, `VaultError`, missing LLM configuration, argparse usage errors |
+| 2 | environment failure | `ZoteroUnavailableError`, `VaultError`, `CollectionNotFoundError`, missing LLM configuration, argparse usage errors |
 
 Every nonzero exit except audit-violations prints exactly one line
 `"error: {message}\n"` to **stderr** and nothing extra to stdout.
 
 ### 9.4 LLM construction (only when `llm is None` and the command needs one)
 
-`compile` and `ask` need an LLM. If not injected: verify that `claude` is
+`compile`, `sync`, and `ask` need an LLM. If not injected: verify that `claude` is
 available on PATH; if not found → `error: claude not found` on stderr, exit 2,
 no subprocess spawned. `ingest` and `audit` never construct an LLM.
+
+### 9.6 `sync` subcommand
+
+```
+zotwiki sync --vault DIR --collection NAME [--update]
+```
+
+Requires LLM (same PATH check as `compile`; exit 2 if `claude` not on PATH).
+
+Algorithm:
+
+1. Verify `--vault DIR` exists; else `VaultError` → exit 2.
+2. `items = store.collection_items(NAME)`. `CollectionNotFoundError` → stderr
+   `error: collection {NAME!r} not found`, exit 2.
+3. For each item in `items`, in order:
+   - If `item.citekey == ""`: skip silently (no stdout line, not counted).
+   - Else if `{vault}/{title}.md` exists and `--update` is not set:
+     stdout `"skipped\t{title}\n"`, increment skipped count.
+   - Else: `result = Compiler(store, llm).compile([item.key], existing)` where
+     `existing` is the parsed existing page when `--update` and the page exists,
+     else `None`; then `VaultPublisher(vault, store, today=--today).publish(result.article)`;
+     stdout `"compiled\t{title}\t{path}\n"`, increment compiled count.
+     If `result.contradictions`: `publish_contradictions(title, …)`;
+     stdout `"contradictions\t{title}\t{count}\n"`.
+   - `ArticleSchemaError` mid-sync → stderr `error: {message}`, exit 1 immediately.
+4. Final stdout line (always): `"sync: {compiled} compiled, {skipped} skipped\n"`.
+5. Exit 0.
+
+DECISION: the `title` used in the `skipped` line is the item's Zotero title, not
+a page title derived from LLM output. DECISION: citekey-less items are not counted
+in either total — they do not appear in the summary denominator.
+
+`SyncReport` is returned by `Syncer.sync` (internal use; not printed by CLI):
+
+```python
+@dataclass(frozen=True)
+class SyncReport:
+    compiled: int
+    skipped: int
+```
+
+`Syncer` constructor and method:
+
+```python
+class Syncer:
+    def __init__(self, store: ZoteroStore, llm: LLMClient, vault: Path,
+                 *, today: str | None = None) -> None: ...
+    def sync(self, name: str, *, update: bool = False) -> SyncReport: ...
+```
+
+`sync` implements steps 2–4 above (raising `CollectionNotFoundError` rather than
+printing to stderr — the CLI handles the error-to-exit mapping).
 
 ### 9.5 `zotwiki.ask`
 
