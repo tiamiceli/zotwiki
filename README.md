@@ -103,7 +103,7 @@ uv pip install -e .
 uv run --with pytest --with hypothesis --with pytest-httpserver pytest
 ```
 
-For Claude Code operator instructions (exact command syntax, output formats, exit codes), see [`CLAUDE.md`](CLAUDE.md).
+For Claude Code operator instructions (exact command syntax, output formats, exit codes), see [`docs/operator.md`](docs/operator.md).
 
 ---
 
