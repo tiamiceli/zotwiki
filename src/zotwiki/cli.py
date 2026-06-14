@@ -27,6 +27,11 @@ from zotwiki.zotero import DEFAULT_BASE_URL, HTTPZoteroStore, ZoteroStore
 
 __all__ = ["main", "EXIT_OK", "EXIT_FAIL", "EXIT_ENV"]
 
+
+def run() -> None:
+    import sys
+    sys.exit(main())
+
 EXIT_OK, EXIT_FAIL, EXIT_ENV = 0, 1, 2
 
 _NEEDS_LLM = ("compile", "ask")
