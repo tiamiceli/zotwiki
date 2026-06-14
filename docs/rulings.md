@@ -100,3 +100,36 @@ runtime errors, and makes ZotWiki usable without additional setup.
 - (d) Phase B tasks are pure refactors: no observable behavior changes, no
   contract surface changes. If any Phase B task would require a contract
   amendment, it must be raised as a new ruling before proceeding.
+
+---
+
+## Ruling 3 — sync subcommand authorized
+
+**Date:** 2026-06-14 · **Scope:** post-M6 · **Status:** binding.
+
+**1. Disposition: `zotwiki sync` is added as the primary user-facing workflow.**
+
+The current `compile` subcommand requires the user or driver to specify individual Zotero keys or search queries. The intended usage model is simpler: the human maintains a named Zotero collection; one command syncs the entire collection into the vault, compiling new items and (optionally) updating existing ones. This requires a new `sync` subcommand and a new `collection_items` method on `ZoteroStore`.
+
+**2. Contract changes (binding, see plan-sync.md for details):**
+
+- `errors.py`: add `CollectionNotFoundError(ZoteroError)`.
+- `contract.md §3`: add `collection_items(name: str) -> list[SourceItem]` to the `ZoteroStore` protocol.
+- `contract.md §4`: document the two new Zotero local API endpoints (`/collections`, `/collections/{key}/items`).
+- `contract.md §9`: add §9.6 specifying the `sync` subcommand's flags, stdout format, and exit codes.
+
+**3. Requirements added (binding):**
+
+REQ-040 through REQ-044, specified in `plan-sync.md`.
+
+**4. plan-sync.md is authorized.**
+
+TDD discipline applies: tester writes and commits red tests before coder writes any implementation.
+
+**5. Conditions (binding):**
+
+- (a) All pre-existing tests remain green at the end of the coder phase.
+- (b) `collection_items` uses only stdlib HTTP (`urllib.request`); no new runtime dependencies.
+- (c) The `LLMClient` protocol and injection seam are unchanged.
+- (d) `sync` skips items with no citekey silently (not an error, not counted in summary totals).
+- (e) Default behavior (no `--update`) never overwrites an existing page.

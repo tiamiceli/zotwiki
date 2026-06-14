@@ -1,29 +1,32 @@
 # zotwiki
 
-ZotWiki compiles your Zotero research library into an Obsidian wiki using Claude. It pulls sources from Zotero's local API, sends them to Claude via the Claude Code CLI, and writes canonical Markdown pages into a vault directory. It also audits the vault for broken links and stale citations, and can answer questions from the vault.
+ZotWiki turns a Zotero collection into an Obsidian wiki. You add papers to a Zotero folder; ZotWiki (driven by Claude Code) synthesizes them into linked wiki pages with citations, cross-references, and contradiction tracking.
 
 ```
-Zotero library  →  zotwiki compile  →  Obsidian vault (.md pages)
-                      ↑ Claude CLI           ↓
-                                      zotwiki audit / ask
+Zotero collection  →  zotwiki sync  →  Obsidian vault (.md pages)
+                         ↑ Claude               ↓
+                                         zotwiki audit / ask
 ```
 
 ---
 
 ## Prerequisites
 
-**Python 3.12+** — check with `python3 --version`. If unavailable: `uv python install 3.12`.
-
 **uv** — ZotWiki is installed via [uv](https://docs.astral.sh/uv/):
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-**Claude Code CLI** — the `compile` and `ask` commands shell out to `claude`. Requires a [Claude Pro or Claude for Work](https://claude.ai) subscription and the Claude Code CLI on your PATH. Follow the [Claude Code quickstart](https://docs.anthropic.com/en/docs/claude-code/quickstart) to install it.
+**Python 3.12+** — if unavailable, uv can install it:
+```bash
+uv python install 3.12
+```
 
-**Zotero 7+** — must be open while you run ZotWiki. The local API at `http://127.0.0.1:23119` is enabled by default; no extra configuration needed.
+**Claude Code CLI** — `compile`, `sync`, and `ask` shell out to `claude`. Requires a [Claude Pro or Claude for Work](https://claude.ai) subscription and the Claude Code CLI on your PATH. Follow the [Claude Code quickstart](https://docs.anthropic.com/en/docs/claude-code/quickstart) to install it.
 
-**Better BibTeX** (recommended for existing libraries) — ZotWiki identifies items by citekey (`Citation Key: authorYYYYword` in Zotero's Extra field). The [Better BibTeX plugin](https://retorque.re/zotero-better-bibtex/installation/) adds these automatically to all items. Without citekeys, `compile` will fail. Items added via `zotwiki ingest` get citekeys automatically.
+**Zotero 7+** — must be open while ZotWiki is running. The local API at `http://127.0.0.1:23119` is enabled by default.
+
+**Better BibTeX** (recommended for existing libraries) — ZotWiki identifies papers by citekey (`Citation Key: authorYYYYword` in Zotero's Extra field). The [Better BibTeX plugin](https://retorque.re/zotero-better-bibtex/installation/) adds these to all items automatically. Papers added via ZotWiki's `ingest` command get citekeys without the plugin.
 
 ---
 
@@ -33,69 +36,77 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 git clone <repo-url>
 cd zotwiki
 uv tool install .
-zotwiki --help
 ```
-
-### Development install
-
-To have source edits take effect immediately without reinstalling:
-
-```bash
-uv pip install -e .
-```
-
-### Test suite
-
-```bash
-uv run --with pytest --with hypothesis --with pytest-httpserver pytest
-```
-
-All tests are hermetic — no real Zotero, no real LLM, no network beyond `127.0.0.1` fixtures.
 
 ---
 
-## Typical session
+## How to use ZotWiki
+
+ZotWiki is designed to be driven by Claude Code. You work in Zotero and Obsidian; Claude Code handles the CLI.
+
+### 1. Set up a Zotero collection
+
+In Zotero, create a collection (folder) for the papers you want in your wiki — for example, **"AI Papers"**. Add papers to it by dragging PDFs in, using the Zotero browser connector, or asking Claude Code to run `zotwiki ingest`.
+
+### 2. Create your vault
+
+Create an empty directory for your wiki pages:
 
 ```bash
-# Add a paper to Zotero
-zotwiki ingest --title "BERT" --creator "Jacob Devlin" --year 2019
-
-# Compile it into the wiki (creates BERT.md and updates Index.md)
-zotwiki compile --vault ./wiki --query "BERT devlin"
-
-# Update an existing page with another paper
-zotwiki compile --vault ./wiki --key NEWKEY99 --page "BERT"
-
-# Audit for integrity
-zotwiki audit --vault ./wiki
-
-# Ask a question
-zotwiki ask --vault ./wiki "How does BERT differ from GPT?"
+mkdir -p ~/research/wiki
 ```
+
+### 3. Sync with Claude Code
+
+Open Claude Code in your research project directory and ask it to sync:
+
+> "Sync my wiki from the 'AI Papers' Zotero collection into ./wiki"
+
+Claude Code will run `zotwiki sync`, compile each paper into a wiki page, and report what was added.
+
+### 4. Read in Obsidian
+
+Open the vault directory in Obsidian. Pages link to each other, cite their sources, and flag contradictions automatically. Re-sync whenever you add papers to the collection.
+
+### 5. Ask questions
+
+Ask Claude Code a research question from the vault:
+
+> "What does my wiki say about the relationship between attention and recurrence?"
+
+Claude Code will run `zotwiki ask` and synthesize an answer from your pages.
 
 ---
 
 ## Vault layout
 
-ZotWiki writes a flat directory of `.md` files you can open directly in Obsidian:
-
 ```
 wiki/
 ├── Index.md            # auto-maintained list of all pages
 ├── Contradictions.md   # append-only log of contradicted claims
-├── Transformer.md      # entity pages, named after the article title
+├── Transformer.md      # one page per paper, named after the article title
 ├── Attention Mechanism.md
 └── ...
 ```
 
+Open the vault directory directly in Obsidian. The files are plain Markdown — no Obsidian installation is required to use ZotWiki.
+
 ---
 
-## Using with Claude Code
+## Development
 
-If you use Claude Code to help manage your research wiki, copy the contents of `CLAUDE.md` from this repo into your project's own `CLAUDE.md`. It gives Claude Code the exact command syntax, output formats, and error behaviors it needs to drive ZotWiki reliably.
+```bash
+# Editable install (changes take effect immediately)
+uv pip install -e .
+
+# Test suite (hermetic — no real Zotero, no real LLM, no external network)
+uv run --with pytest --with hypothesis --with pytest-httpserver pytest
+```
+
+For Claude Code operator instructions (exact command syntax, output formats, exit codes), see [`CLAUDE.md`](CLAUDE.md).
 
 ---
 
 ## Known issues
 
-**macOS case-collision** — two items whose titles differ only in case (e.g. `"Bert"` and `"BERT"`) map to the same `.md` file. The collision is not detected before the write, so one page silently overwrites the other. Will be fixed in a future release.
+**macOS case-collision** — two papers whose titles differ only in case (e.g. `"Bert"` and `"BERT"`) map to the same `.md` file. The collision is not detected before the write, so one page silently overwrites the other. Will be fixed in a future release.
