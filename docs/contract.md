@@ -214,9 +214,9 @@ as `""` / `[]`):
 - `citekey`: scan `d.get("extra", "")` line by line; the first line matching
   the regex `^Citation Key:\s*(\S+)\s*$` (case-sensitive on
   `Citation Key:`) yields the citekey; otherwise `""`.
-- `has_fulltext`: per §4.5 probe. DECISION: every `SourceItem`
-  materialization (from `get`, `search`, and `resolve`) performs one
-  `GET /items/{key}/fulltext` probe; 200 → `True`, 404 → `False`.
+- `has_fulltext`: per §4.5 two-step probe. DECISION: every `SourceItem`
+  materialization (from `get`, `search`, and `resolve`) performs the §4.5
+  probe on the item's own key, falling through to child items on 404.
 
 ### 3.2 `HTTPZoteroStore` constructor
 
@@ -326,11 +326,27 @@ is unknown.
 `version` is present but ignored by the adapter. Any `data` key may be
 absent; the adapter treats absent as empty (§3.1).
 
-### 4.5 Fulltext probe
+### 4.5 Fulltext probe (two-step)
 
-`has_fulltext` is defined operationally: `GET {base}/items/{KEY}/fulltext`
-returns 200 ⇔ `has_fulltext is True`. The fake server decides per item
-whether to serve fulltext.
+`has_fulltext` is determined by a two-step procedure applied to a parent item
+key `KEY`:
+
+1. **Parent probe:** `GET {base}/items/{KEY}/fulltext` — if 200, `has_fulltext
+   = True` and the content is available.
+2. **Children fallback:** if step 1 returns 404, fetch child keys via §4.9,
+   then probe each child key with `GET {base}/items/{child_key}/fulltext` in
+   server order. The first 200 response sets `has_fulltext = True` and
+   provides the content.
+3. If no probe returns 200, `has_fulltext = False`.
+
+The same two-step procedure applies when `store.fulltext(key)` is called:
+step 1 returns the parent's content on 200; step 2 returns the first child's
+content on 200; if all return 404, `FulltextNotFoundError` is raised.
+
+DECISION: children are fetched only when the parent returns 404 (lazy). A 404
+from the children endpoint itself is treated as an empty list (no children).
+The fake server decides per item whether to serve fulltext on the parent or on
+a child.
 
 ### 4.7 `GET {base}/collections?format=json`
 
@@ -345,6 +361,18 @@ The adapter reads only `key` and `data.name`. The fake returns all registered co
 ### 4.8 `GET {base}/collections/{KEY}/items?format=json&limit=100`
 
 Returns a JSON **array** of item objects (same shape as §4.4) for all items in the collection. The adapter always sends `limit=100`. The fake returns items in insertion order (same limit is sent; the fake need not enforce it).
+
+### 4.9 `GET {base}/items/{KEY}/children?format=json`
+
+Returns a JSON **array** of child item objects (attachments, notes) of the given
+parent item. Each child object has at minimum a top-level `"key"` string field;
+the adapter reads only that field.
+
+- `200` with a JSON array (possibly empty) when the parent key is known.
+- `404` when the parent key is unknown — the adapter treats this identically to
+  an empty array (no children, no error).
+
+The adapter does not retry on 404. The fake returns children in insertion order.
 
 ---
 

@@ -103,6 +103,51 @@ runtime errors, and makes ZotWiki usable without additional setup.
 
 ---
 
+## Ruling 4 — fulltext probe must fall through to child attachment items
+
+**Date:** 2026-06-14 · **Scope:** `zotero.py` §4.5 probe, plan-v1.2.md · **Status:** binding.
+
+**1. Disposition: `_probe_fulltext` and `fulltext` are extended to check child
+attachment items when the parent item returns 404.**
+
+In Zotero 7, fulltext is indexed on child attachment items (PDFs stored as
+`imported_file` attachments), not on the parent bibliographic record. The
+current contract (§4.5) and implementation probe only
+`GET /items/{KEY}/fulltext` on the parent key. This causes every item with an
+attached PDF to have `has_fulltext = False`, so the compiler never includes
+fulltext in the LLM prompt, and the LLM refuses to produce verbatim-quoted
+claims.
+
+**2. Contract changes (binding, see plan-v1.2.md for tester/coder details):**
+
+- `contract.md §4.5`: rewrite the fulltext probe as a two-step procedure:
+  (1) try the parent key; (2) on 404, fetch the item's children via §4.9 and
+  probe each child key. First 200 wins; all 404 → `False`/`FulltextNotFoundError`.
+- `contract.md §4.9` (new): `GET {base}/items/{KEY}/children?format=json` —
+  returns a JSON array of child item objects; 404 treated as empty (no children).
+- `contract.md §3.1`: `has_fulltext` note updated to reference the two-step probe.
+
+**3. Requirements added (binding):**
+
+REQ-045: fulltext probe and fetch fall through to child attachment items.
+
+**4. plan-v1.2.md is authorized.**
+
+TDD discipline applies: tester writes and commits red tests before the coder
+writes any implementation.
+
+**5. Conditions (binding):**
+
+- (a) All pre-existing tests remain green at the end of the coder phase.
+- (b) Only `src/zotwiki/zotero.py` changes; no other source files are touched.
+- (c) The `_child_keys` helper is private; no public protocol changes.
+- (d) A 404 from the children endpoint is treated as an empty list (not an
+  error), because Zotero may return 404 for items with no children depending
+  on version.
+- (e) Child ordering follows server order; the first child with fulltext wins.
+
+---
+
 ## Ruling 3 — sync subcommand authorized
 
 **Date:** 2026-06-14 · **Scope:** post-M6 · **Status:** binding.

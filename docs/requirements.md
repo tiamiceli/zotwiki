@@ -482,4 +482,41 @@ is called,
 
 ---
 
-Total: 44 requirements (REQ-001 … REQ-044).
+## I. Fulltext child-attachment fallback
+
+### REQ-045 — fulltext probe and fetch fall through to child attachment items
+
+**Given** a fake Zotero server where:
+- Item `AAAA0001` has fulltext at `GET /items/AAAA0001/fulltext` (200) — no
+  children endpoint is needed (regression guard).
+- Item `BBBB0002` has no fulltext at `GET /items/BBBB0002/fulltext` (404), but
+  has one child key `CCCC0003` whose fulltext endpoint returns 200 with content
+  `"child text"`. The children endpoint `GET /items/BBBB0002/children` returns
+  `[{"key": "CCCC0003"}]`.
+- Item `DDDD0004` has no fulltext at the parent (404), one child `EEEE0005`
+  also with no fulltext (404), and `GET /items/DDDD0004/children` returns
+  `[{"key": "EEEE0005"}]`.
+- Item `FFFF0006` has no parent fulltext (404) and `GET /items/FFFF0006/children`
+  returns `[]`.
+
+**When** each item is materialized as a `SourceItem` (via `get`, `search`, or
+`resolve`) and `store.fulltext(key)` is called,
+
+**Then:**
+- `AAAA0001.has_fulltext == True`; `store.fulltext("AAAA0001")` returns the
+  parent content; the children endpoint is never hit for `AAAA0001`.
+- `BBBB0002.has_fulltext == True`; `store.fulltext("BBBB0002")` returns
+  `"child text"`.
+- `DDDD0004.has_fulltext == False`; `store.fulltext("DDDD0004")` raises
+  `FulltextNotFoundError`.
+- `FFFF0006.has_fulltext == False`; `store.fulltext("FFFF0006")` raises
+  `FulltextNotFoundError`.
+
+**Error behavior:** the children endpoint is only called when the parent
+fulltext probe returns 404 (lazy). A 404 from the children endpoint itself is
+treated as an empty list (no error). Non-404 HTTP errors from any probe follow
+REQ-008.
+
+---
+
+Total: 45 requirements (REQ-001 … REQ-045).
