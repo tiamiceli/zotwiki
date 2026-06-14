@@ -60,11 +60,11 @@ claude --version
 
 If `claude` is not on your PATH when running `compile` or `ask`, ZotWiki prints `error: claude not found` and exits with code 2.
 
-### 4. Zotero 7 (desktop app, running)
+### 4. Zotero 7 or later (desktop app, running)
 
 ZotWiki talks to the **Zotero local API** at `http://127.0.0.1:23119`. This requires:
 
-- [Zotero 7](https://www.zotero.org/download/) installed and **open** while you run any ZotWiki command.
+- [Zotero 7+](https://www.zotero.org/download/) installed and **open** while you run any ZotWiki command.
 - The local API is enabled by default in Zotero 7 — no additional configuration is needed.
 
 Confirm it is reachable:
