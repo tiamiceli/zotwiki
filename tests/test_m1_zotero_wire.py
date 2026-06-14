@@ -50,10 +50,15 @@ def test_req_002__search_sends_exact_wire_request_plus_fulltext_probes(fake_zote
     }
     # the query must arrive URL-encoded (space as + or %20), never raw
     assert f"q={w1}+{w2}" in req.raw_query or f"q={w1}%20{w2}" in req.raw_query
-    # the only other traffic is exactly one fulltext probe per returned item
+    # the only other traffic is fulltext probes plus a children probe for
+    # items whose own /fulltext returns 404 (contract §4.5 two-step probe)
     other_paths = sorted(r.path for r in fake_zotero.requests if r is not req)
     assert other_paths == sorted(
-        [fake_zotero.fulltext_path(k1), fake_zotero.fulltext_path(k2)]
+        [
+            fake_zotero.fulltext_path(k1),
+            fake_zotero.fulltext_path(k2),
+            f"{fake_zotero.items_path}/{k2}/children",
+        ]
     )
 
 
