@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from zotwiki.errors import ArticleSchemaError, PageParseError, VaultError
-from zotwiki.llm import LLMClient, _strip_fence
+from zotwiki.llm import LLMClient
 from zotwiki.publisher import (
     CONTRADICTIONS_FILENAME,
     INDEX_FILENAME,
@@ -21,6 +21,14 @@ from zotwiki.publisher import (
 )
 
 __all__ = ["Answer", "SourceRef", "ask"]
+
+
+def _strip_fence(text: str) -> str:
+    stripped = text.strip()
+    if stripped.startswith("```") and stripped.endswith("```"):
+        lines = stripped.split("\n")
+        stripped = "\n".join(lines[1:-1])
+    return stripped
 
 _SPECIAL_FILENAMES = (INDEX_FILENAME, CONTRADICTIONS_FILENAME)
 
