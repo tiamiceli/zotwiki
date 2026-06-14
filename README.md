@@ -1,12 +1,12 @@
 # zotwiki
 
-ZotWiki compiles your Zotero research library into an Obsidian wiki using Claude. It pulls sources from Zotero's local API, sends them to an Anthropic LLM, and writes canonical Markdown pages into a vault directory. It also audits the vault for broken links and stale citations, and can answer questions from the vault using the LLM.
+ZotWiki compiles your Zotero research library into an Obsidian wiki using Claude. It pulls sources from Zotero's local API, sends them to Claude via the Claude Code CLI, and writes canonical Markdown pages into a vault directory. It also audits the vault for broken links and stale citations, and can answer questions from the vault.
 
 ## How it works
 
 ```
 Zotero library  →  zotwiki compile  →  Obsidian vault (.md pages)
-                      ↑ Claude LLM           ↓
+                      ↑ Claude CLI           ↓
                                       zotwiki audit / ask
 ```
 
@@ -15,7 +15,7 @@ ZotWiki has four subcommands:
 | Command | What it does |
 |---|---|
 | `ingest` | Add a source item to Zotero with an auto-generated citekey |
-| `compile` | Ask the LLM to synthesize one or more Zotero items into a wiki page |
+| `compile` | Ask Claude to synthesize one or more Zotero items into a wiki page |
 | `audit` | Check the vault for broken links, unresolved citekeys, orphan pages, etc. |
 | `ask` | Answer a natural-language question from the vault's content |
 
@@ -23,15 +23,44 @@ ZotWiki has four subcommands:
 
 ## Prerequisites
 
-### 1. Python 3.12
+### 1. Python 3.12+
 
-ZotWiki targets Python 3.12 exactly. Check your version:
+ZotWiki requires Python 3.12 or later. Check your version:
 
-```
+```bash
 python3 --version
 ```
 
-### 2. Zotero 7 (desktop app, running)
+If Python 3.12 is not available, uv can install it:
+
+```bash
+uv python install 3.12
+```
+
+### 2. uv
+
+ZotWiki is installed and run via [uv](https://docs.astral.sh/uv/). Install it if you don't have it:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+### 3. Claude Code CLI
+
+The `compile` and `ask` commands call Claude via the `claude` CLI. You need:
+
+- A [Claude Pro or Claude for Work](https://claude.ai) subscription.
+- The Claude Code CLI installed. Follow the [Claude Code quickstart](https://docs.anthropic.com/en/docs/claude-code/quickstart) — the installer adds `claude` to your PATH.
+
+Confirm it is available:
+
+```bash
+claude --version
+```
+
+If `claude` is not on your PATH when running `compile` or `ask`, ZotWiki prints `error: claude not found` and exits with code 2.
+
+### 4. Zotero 7 (desktop app, running)
 
 ZotWiki talks to the **Zotero local API** at `http://127.0.0.1:23119`. This requires:
 
@@ -40,81 +69,54 @@ ZotWiki talks to the **Zotero local API** at `http://127.0.0.1:23119`. This requ
 
 Confirm it is reachable:
 
-```
+```bash
 curl http://127.0.0.1:23119/api/users/0/items?limit=1&format=json
 ```
 
-If Zotero is not running, every ZotWiki command will fail with `error: ...` and exit code 2.
+If Zotero is not running, every ZotWiki command fails with `error: ...` and exit code 2.
 
-### 3. Better BibTeX for Zotero (recommended for existing libraries)
+### 5. Better BibTeX for Zotero (recommended for existing libraries)
 
 ZotWiki identifies items by citekey — the `Citation Key: authorYYYYword` line in a Zotero item's Extra field. There are two ways to get citekeys into your library:
 
 - **Via `zotwiki ingest`**: ZotWiki generates and writes the citekey itself.
 - **For existing items**: Install the [Better BibTeX for Zotero](https://retorque.re/zotero-better-bibtex/installation/) plugin. It automatically adds `Citation Key:` lines to every item's Extra field.
 
-Without citekeys, `compile` will fail with a `CitekeyNotFoundError`.
-
-### 4. An Anthropic API key
-
-The `compile` and `ask` commands call the Anthropic Messages API. You need:
-
-- An [Anthropic API account](https://console.anthropic.com/) with a valid API key.
-- A model ID (e.g. `claude-sonnet-4-6`). See the [Anthropic model docs](https://docs.anthropic.com/en/docs/models-overview) for current IDs.
+Without citekeys, `compile` fails with a `CitekeyNotFoundError`.
 
 ---
 
-## First-time setup
+## Installation
 
-### Clone the repository
+Clone the repository and install ZotWiki as a uv tool. This puts `zotwiki` on your PATH with no further setup:
 
 ```bash
 git clone <repo-url>
 cd zotwiki
+uv tool install .
 ```
 
-### Install test dependencies (optional, for running the test suite)
-
-ZotWiki has **zero runtime dependencies** — it uses only the Python standard library. The test suite requires additional packages:
+Verify the install:
 
 ```bash
-pip install pytest>=7.0 hypothesis pytest-httpserver
+zotwiki --help
 ```
 
-Or:
+### Development install
+
+If you are editing ZotWiki's source and want changes to take effect immediately without reinstalling:
 
 ```bash
-pip install -r requirements-test.txt
+uv pip install -e .
 ```
 
-### Set environment variables
+### Running the test suite
 
-For commands that call the LLM (`compile`, `ask`), set:
+All tests are hermetic — no real Zotero, no real LLM, no network beyond `127.0.0.1` test fixtures:
 
 ```bash
-export ANTHROPIC_API_KEY="sk-ant-..."
-export ZOTWIKI_MODEL="claude-sonnet-4-6"
+uv run --with pytest --with hypothesis --with pytest-httpserver pytest
 ```
-
-You can add these to your shell profile or a `.env` file. If either variable is missing when running `compile` or `ask`, ZotWiki will print `error: LLM not configured` and exit with code 2.
-
----
-
-## Running ZotWiki
-
-Because there is no `pyproject.toml`, the package is not pip-installable. You must set `PYTHONPATH` to point at the `src` directory when running the CLI directly:
-
-```bash
-PYTHONPATH=src python -m zotwiki --help
-```
-
-For convenience, define a shell alias:
-
-```bash
-alias zotwiki='PYTHONPATH=/path/to/zotwiki/src python -m zotwiki'
-```
-
-All examples below assume this alias (or equivalent `PYTHONPATH` setup).
 
 ---
 
@@ -147,7 +149,7 @@ zotwiki ingest \
 zotwiki compile --vault DIR (--key KEY [--key KEY ...] | --query QUERY) [--limit N] [--page TITLE] [--today YYYY-MM-DD]
 ```
 
-Fetches items from Zotero, sends them to the LLM, and writes a Markdown page into `--vault DIR`. On success, prints a `compiled\t{title}\t{path}` line.
+Fetches items from Zotero, sends them to Claude, and writes a Markdown page into `--vault DIR`. On success, prints a `compiled\t{title}\t{path}` line.
 
 **Compile by Zotero key:**
 
@@ -167,9 +169,9 @@ zotwiki compile --vault ./wiki --query "attention transformer" --limit 5
 zotwiki compile --vault ./wiki --query "transformer" --page "Transformer"
 ```
 
-`--page TITLE` names the expected page title. If the article the LLM returns has a different title, the command fails (exit 1) and nothing is written.
+`--page TITLE` names the expected page title. If the article Claude returns has a different title, the command fails (exit 1) and nothing is written.
 
-If the LLM detects that a new finding contradicts something already on the page, a `Contradictions.md` file is appended automatically, and a `contradictions\t{title}\t{count}` line is printed.
+If Claude detects that a new finding contradicts something already on the page, a `Contradictions.md` file is appended automatically, and a `contradictions\t{title}\t{count}` line is printed.
 
 ---
 
@@ -212,7 +214,7 @@ audit: 1 violation(s)
 zotwiki ask --vault DIR QUESTION
 ```
 
-Reads every entity page in the vault, asks the LLM your question, and prints an answer with source citations.
+Reads every entity page in the vault, sends them to Claude with your question, and prints an answer with source citations.
 
 ```bash
 zotwiki ask --vault ./wiki "What is self-attention and why does it replace recurrence?"
@@ -246,21 +248,9 @@ Override the Zotero local API base URL (default: `http://127.0.0.1:23119/api/use
 |---|---|
 | 0 | Success |
 | 1 | Domain failure (bad LLM output, item not found, audit violations, etc.) |
-| 2 | Environment failure (Zotero unreachable, missing API key, bad arguments) |
+| 2 | Environment failure (Zotero unreachable, `claude` not found, bad arguments) |
 
 Every non-zero exit prints exactly one `error: {message}` line to stderr (audit violations go to stdout instead).
-
----
-
-## Running the test suite
-
-All tests are hermetic — no real Zotero, no real LLM, no network beyond `127.0.0.1` test fixtures.
-
-```bash
-pytest
-```
-
-`pytest.ini` sets `pythonpath = src`, so no `PYTHONPATH` export is needed for tests.
 
 ---
 
@@ -281,15 +271,15 @@ Pages are valid Obsidian Markdown with YAML frontmatter. You can open the vault 
 
 ---
 
-## Subsequent sessions
+## Typical session
 
-Once you've set `ANTHROPIC_API_KEY` and `ZOTWIKI_MODEL` and confirmed Zotero is running, a typical session looks like:
+Once ZotWiki is installed and Zotero is running:
 
 ```bash
 # 1. Add a new paper to Zotero
 zotwiki ingest --title "BERT" --creator "Jacob Devlin" --year 2019
 
-# 2. Compile it into the wiki (will create BERT.md and update Index.md)
+# 2. Compile it into the wiki (creates BERT.md and updates Index.md)
 zotwiki compile --vault ./wiki --query "BERT devlin"
 
 # 3. Update an existing page with a new paper
@@ -306,18 +296,6 @@ zotwiki ask --vault ./wiki "How does BERT differ from GPT?"
 
 ## Known issues
 
-### No `pyproject.toml` — package is not pip-installable
+### Case-colliding page titles fail on macOS
 
-There is no `pyproject.toml` or `setup.cfg`. ZotWiki cannot be installed with `pip install .` and the `zotwiki` command will not be available on your `PATH` without a wrapper. You must prefix every invocation with `PYTHONPATH=src` or define a shell alias. Adding a `pyproject.toml` with a `[project.scripts]` entry would resolve this.
-
-### `AnthropicLLMClient` does not handle HTTP errors
-
-The production LLM client (`zotwiki/llm.py:49–73`) uses `urllib.request.urlopen` with no error handling around the HTTP call. Errors from the Anthropic API — including a 401 for a bad API key, a 429 for rate limiting, or any 5xx server error — will raise a raw `urllib.error.HTTPError` exception. These are not caught and converted into the ZotWikiError taxonomy, so they bypass the CLI's `error: ...` formatting and instead produce a Python traceback. The fix is to wrap the `urlopen` call in a try/except and raise a `ZotWikiError` (or return a useful error string).
-
-### `_parse_frontmatter` is duplicated
-
-The frontmatter parser is implemented twice: once in `publisher.py` (returns `tuple[dict, int]`) and again in `auditor.py` (returns `dict`). The two copies must be kept in sync by hand. The auditor version should delegate to the publisher version or share a common helper.
-
-### `ask.py` imports private internals
-
-`ask.py` imports `_strip_fence` from `zotwiki.llm` and `_parse_frontmatter` from `zotwiki.publisher` — both underscore-prefixed and not in the public API surface defined by the contract. Changes to those private functions could silently break `ask` without any contract violation. These helpers should either be promoted to the public surface or `ask` should reimplement the small pieces it needs.
+On macOS (case-insensitive filesystem), two Zotero items whose titles differ only in case — e.g. `"Bert"` and `"BERT"` — will map to the same `.md` file. The expected `VaultError` is not raised before the file is written, so one page silently overwrites the other. This is a pre-existing limitation of the current publisher implementation and will be addressed in a future release.
