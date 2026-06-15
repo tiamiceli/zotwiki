@@ -90,3 +90,46 @@ Full suite passes (all pre-existing tests + REQ-045 tests).
 ## No Phase B
 
 No refactors, no contract surface changes beyond §4.9 and the §4.5 update.
+
+---
+
+## Known bugs discovered during v1.2 work (not yet planned)
+
+### BUG-1 — Sync skip-check uses Zotero item title, not compiled article title
+
+**Observed:** 2026-06-15
+
+**Symptom:** `sync` re-compiles the same Zotero item on every run, creating
+multiple pages with slightly different titles (e.g. "Data Anomaly Typology",
+"Typology of Data Anomalies", "A Typology of Data Anomalies") instead of
+skipping it after the first compile.
+
+**Root cause:** `Syncer.sync()` (`src/zotwiki/syncer.py:57`) determines whether
+a page already exists via `publisher.page_path(item.title)` — where
+`item.title` is the Zotero metadata title (e.g. "A Typology of Data
+Anomalies"). The compiled article title is chosen by the LLM and is often
+different (shorter, reformatted). If they don't match, no file is found at the
+expected path and the item is compiled again every run.
+
+**Impact:** Duplicate pages accumulate in the vault; skip logic is unreliable
+for any item whose LLM-generated title differs from its Zotero title.
+
+**Needs:** ruling + contract decision on how the syncer should track which
+items have been compiled (by citekey? by Zotero key? by persisting a manifest?)
+before a tester and coder can address it.
+
+### BUG-2 — LLM sometimes produces invalid claim schema (addressed by prompt refactor)
+
+**Observed:** 2026-06-15 · **Status:** mitigated (not fully fixed)
+
+**Symptom:** `sync` exits 1 with errors like `claims[0].citekey: unknown key`
+or `claims[2].quotes[1].text: must be a single line`. Inconsistent across
+retries.
+
+**Root cause:** `_BASE_INSTRUCTIONS` in `src/zotwiki/compiler.py` referenced
+"docs/contract.md SS5.2" without including the actual schema. The LLM guessed
+at field names (`citekey` vs `citekeys`) and allowed multi-line quote strings.
+
+**Mitigation applied (commit 555c02d):** Prompt now includes an explicit JSON
+shape example and a rule that quote text must be a single line. Schema errors
+are significantly reduced but may still occur occasionally on complex papers.
