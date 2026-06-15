@@ -41,7 +41,7 @@ maker; `coder` = implementation author; `tester` = test suite author.
 | `plan.md` | planner | Original six-milestone plan (M1–M6) covering the full initial implementation: Zotero adapter, LLM boundary, compiler, publisher, auditor/contradiction handling, and CLI. Status: completed. |
 | `plan-sync.md` | planner | Plan for the `sync` subcommand (REQ-040–044): `collection_items`, `Syncer`, `sync` CLI flag. Status: completed. |
 | `plan-v1.1.md` | planner | Post-M6 plan authorized by Ruling 2: replaced `AnthropicLLMClient` with `ClaudeCodeLLMClient` (Phase A, TDD), plus infrastructure refactors (Phase B). Status: completed. |
-| `plan-v1.2.md` | planner | Active plan authorized by Ruling 4: fulltext child-attachment fallback (REQ-045, Phase A completed). Also documents Phase B prompt-helper refactors (planned, not yet implemented), BUG-1 (sync skip uses Zotero item title), and BUG-2 (LLM schema errors, mitigated). Status: Phase A complete; Phase B and bugs pending. |
+| `plan-v1.2.md` | planner | Plan authorized by Ruling 4: fulltext child-attachment fallback (REQ-045). Also covers the Phase B prompt-helper refactors (B1–B5) and the compact-embed rule (Ruling 5), plus BUG-1 (sync skip uses Zotero item title) and BUG-2 (LLM schema errors, mitigated). Status: Phase A + B complete; BUG-1 pending (needs ruling), BUG-2 mitigated. |
 
 ### Guides
 

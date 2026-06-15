@@ -1,7 +1,7 @@
 # plan-v1.2 — Fulltext child-attachment fallback (REQ-045)
 
-**Authorized by:** Ruling 4 (2026-06-14)
-**Status:** active
+**Authorized by:** Ruling 4 (2026-06-14); compact-embed rule by Ruling 5 (2026-06-15)
+**Status:** Phase A + B complete; BUG-1 pending (needs ruling), BUG-2 mitigated
 
 ---
 
@@ -84,12 +84,6 @@ Modify `src/zotwiki/zotero.py` only:
 ### Done-gate (green)
 
 Full suite passes (all pre-existing tests + REQ-045 tests).
-
----
-
-## No Phase B
-
-No refactors, no contract surface changes beyond §4.9 and the §4.5 update.
 
 ---
 
