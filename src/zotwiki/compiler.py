@@ -31,10 +31,22 @@ FULLTEXT_PROMPT_LIMIT = 20000
 _BASE_INSTRUCTIONS = (
     "You are ZotWiki's article compiler. Synthesize the source items below "
     "into one encyclopedia-style article. Return exactly one JSON object "
-    'with the keys "title", "summary", "sections", "claims", and "links" '
-    "(docs/contract.md SS5.2) and nothing else: no commentary, at most one "
-    "outer code fence. Every claim must cite its sources by citekey and "
-    "carry verbatim supporting quotes from their fulltexts."
+    "and nothing else: no commentary, at most one outer code fence.\n\n"
+    "Required JSON shape (follow exactly — wrong key names are rejected):\n"
+    '{"title": "Article Title",\n'
+    ' "summary": "One-paragraph summary.",\n'
+    ' "sections": [{"heading": "Section Name", "body": "Section text."}],\n'
+    ' "claims": [{"text": "A factual claim.",\n'
+    '             "citekeys": ["authoryearword"],\n'
+    '             "quotes": [{"citekey": "authoryearword",\n'
+    '                         "text": "verbatim quote from fulltext"}]}],\n'
+    ' "links": ["Related Topic"]}\n\n'
+    "Rules: every claim needs at least one entry in both \"citekeys\" (array "
+    "of strings) and \"quotes\" (array of {\"citekey\", \"text\"} objects). "
+    "Each quote \"text\" must be a SINGLE LINE — no newlines or line breaks "
+    "inside a quote; choose a single continuous sentence or phrase. "
+    "Quotes must be verbatim substrings of the provided fulltext. "
+    "Title and link targets must match ^[A-Za-z0-9][A-Za-z0-9 ,()'\\-]*$."
 )
 
 _UPDATE_INSTRUCTIONS = (
