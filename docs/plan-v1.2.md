@@ -93,6 +93,74 @@ No refactors, no contract surface changes beyond §4.9 and the §4.5 update.
 
 ---
 
+## Phase B — Prompt helper refactors (no new REQs, no contract changes)
+
+Gate: existing test suite stays green throughout. No tester phase needed.
+All changes are in `src/zotwiki/compiler.py` only unless noted.
+
+### B1 — `_schema_example_json()`: generate schema example from real dataclasses
+
+**Problem:** The JSON shape example in `_BASE_INSTRUCTIONS` is a hand-written
+string that must be manually kept in sync with `Article`, `Claim`, `Quote`, and
+`Section` in `models.py`. Drift causes schema errors in LLM output.
+
+**Fix:** Add `_schema_example_json() -> str` that builds the example by calling
+`article_to_json_dict(Article(...))` with a minimal synthetic article, then
+`json.dumps(..., indent=2)`. Embed its output in `_BASE_INSTRUCTIONS` (or build
+the instructions lazily at prompt time). The example will always match what
+`parse_article_json` actually validates.
+
+### B2 — `_render_validation_rules()`: derive rules from the real regex constants
+
+**Problem:** `_BASE_INSTRUCTIONS` repeats the title/citekey character sets as
+prose. The canonical patterns live in `llm.py` as `_TITLE_RE` and `_CITEKEY_RE`
+but are not referenced from the prompt. If the regexes change, the prompt
+silently diverges.
+
+**Fix:** Add `_render_validation_rules() -> str` that imports `_TITLE_RE` and
+`_CITEKEY_RE` from `zotwiki.llm`, extracts `.pattern`, and formats them as
+explicit rules (e.g., `"Title must match: ^[A-Za-z0-9]…"`). Replace the
+hard-coded prose in `_BASE_INSTRUCTIONS` with the output of this function.
+
+### B3 — `_format_source_item(item, fulltext)`: encapsulate source block
+
+**Problem:** Source item blocks are assembled inline in `_build_prompt`'s loop
+with ad-hoc string concatenation. Adding fields (year, creators) or changing
+delimiters requires editing the loop directly.
+
+**Fix:** Extract the loop body into `_format_source_item(item: SourceItem, fulltext: str | None) -> str`. The loop becomes:
+```python
+for item, fulltext in items:
+    parts.append(_format_source_item(item, fulltext))
+```
+Consider adding an explicit `[END FULLTEXT]` delimiter so the LLM knows where
+the text ends.
+
+### B4 — `_format_existing_article(article)`: encapsulate update-mode JSON block
+
+**Problem:** The existing article is serialized inline in `_build_prompt` with
+`json.dumps(article_to_json_dict(existing), sort_keys=True)`. The `sort_keys`
+choice is unexplained and the label/formatting is coupled to the builder.
+
+**Fix:** Extract to `_format_existing_article(article: Article) -> str` that
+returns the labeled, indented JSON block. Use `indent=2, sort_keys=True`
+(sort_keys ensures deterministic output across Python versions). The builder
+becomes `parts.append(_format_existing_article(existing))`.
+
+### B5 — `_update_instructions_with_schema()`: add Contradiction example to update prompt
+
+**Problem:** `_UPDATE_INSTRUCTIONS` describes the `contradictions` array in
+prose ("existing_claim, new_claim, citekeys") without a JSON example. The LLM
+has no concrete shape to follow, risking the same schema-error pattern that
+affected claims.
+
+**Fix:** Replace `_UPDATE_INSTRUCTIONS` with a function
+`_update_instructions_with_schema() -> str` that constructs the text and
+includes a small `json.dumps` example of a `Contradiction` object with the
+correct three field names.
+
+---
+
 ## Known bugs discovered during v1.2 work (not yet planned)
 
 ### BUG-1 — Sync skip-check uses Zotero item title, not compiled article title
