@@ -518,7 +518,8 @@ Invalid input must raise; partially-valid output must never escape.
 
 Inverse of §5.3 step 3–4 minus contradictions: returns a plain dict with
 exactly the five required keys, suitable for `json.dumps`. Used to embed the
-existing article in update prompts; round-trip law:
+existing article in update prompts as the **compact** form (no `indent`; see
+§7.1). Round-trip law:
 `parse_article_json(json.dumps(article_to_json_dict(a)))[0] == a`.
 
 ---
@@ -752,9 +753,10 @@ class Compiler:
    `FULLTEXT_PROMPT_LIMIT` characters.
 2. Build a single prompt string that **must contain**, for each item: its
    citekey, its title, and its (truncated) fulltext when available; and, when
-   `existing is not None`,
-   `json.dumps(article_to_json_dict(existing), sort_keys=True)` as a
-   substring. (Surrounding instruction text is unspecified.)
+   `existing is not None`, the **compact** existing-article embed
+   `json.dumps(article_to_json_dict(existing), sort_keys=True)` (no `indent`)
+   as a verbatim substring. (Surrounding instruction text — including any
+   indented JSON examples — is unspecified.)
 3. `raw = llm.complete(prompt)`; `article, contradictions =
    parse_article_json(raw)`.
 4. If `existing is None` and `contradictions` is non-empty →

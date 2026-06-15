@@ -143,8 +143,11 @@ the text ends.
 choice is unexplained and the label/formatting is coupled to the builder.
 
 **Fix:** Extract to `_format_existing_article(article: Article) -> str` that
-returns the labeled, indented JSON block. Use `indent=2, sort_keys=True`
-(sort_keys ensures deterministic output across Python versions). The builder
+returns the labeled JSON block. Keep the serialization **compact** —
+`json.dumps(article_to_json_dict(existing), sort_keys=True)`, no `indent`:
+contract §7.1 requires this exact string to appear in the prompt as a verbatim
+substring, so indenting it would break REQ-014/REQ-034 (see Ruling 5).
+`sort_keys` ensures deterministic output across Python versions. The builder
 becomes `parts.append(_format_existing_article(existing))`.
 
 ### B5 — `_update_instructions_with_schema()`: add Contradiction example to update prompt

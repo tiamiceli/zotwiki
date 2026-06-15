@@ -169,6 +169,12 @@ zotwiki ask --vault ./wiki "What problem does self-attention solve?"
 
 ---
 
+## Internal notes
+
+- **Update mode** (re-compiling an existing page via `compile --page` or `sync --update`) embeds the current page's article into the LLM prompt as **compact** JSON (`json.dumps(..., sort_keys=True)`, no indentation), fixed by contract §7.1 and not configurable. Operators don't control this; noted for completeness.
+
+---
+
 ## Known limitations
 
 - **macOS case-collision:** two items with titles differing only in case silently overwrite each other's page. Avoid titles that are case-variants of existing pages.

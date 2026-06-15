@@ -126,7 +126,7 @@ ZotWikiError
 
 ## Current status
 
-All planned work is complete. The implemented subcommands are `ingest`, `compile`, `audit`, `ask`, and `sync`. 44 requirements are green (REQ-001–REQ-044); one pre-existing test failure (`test_req_019`) is a known macOS case-collision limitation.
+All planned work is complete. The implemented subcommands are `ingest`, `compile`, `audit`, `ask`, and `sync`. 45 requirements are green (REQ-001–REQ-045); one pre-existing test failure (`test_req_019`) is a known macOS case-collision limitation.
 
 To start new work: write a ruling in `docs/rulings.md`, update `docs/contract.md` and `docs/requirements.md`, then follow the planner → tester → coder sequence.
 
@@ -140,3 +140,4 @@ To start new work: write a ruling in `docs/rulings.md`, update `docs/contract.md
 - `ClaudeCodeLLMClient` is never imported by any test.
 - All new behavior needs a REQ in `docs/requirements.md` before any code is written.
 - A ruling in `docs/rulings.md` is required before any contract change.
+- The existing-article embed in update prompts is compact `json.dumps(…, sort_keys=True)` (no `indent`) — contract §7.1 pins it as a verbatim substring; see Ruling 5. (Indented JSON *examples* in the prompt are fine.)

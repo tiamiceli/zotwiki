@@ -162,9 +162,10 @@ REQ-010 and whose `contradictions == ()`.
 **Given** an existing `Article` and a fake LLM returning a valid article JSON
 that includes a non-empty `contradictions` array,
 **When** `compile(keys, existing=existing)` is called,
-**Then** the recorded prompt contains the existing article serialized via
-`article_to_json_dict` (as a JSON substring), and `CompileResult.contradictions`
-contains the parsed `Contradiction` values in order.
+**Then** the recorded prompt contains the existing article as the **compact**
+substring `json.dumps(article_to_json_dict(existing), sort_keys=True)` (no
+indentation), and `CompileResult.contradictions` contains the parsed
+`Contradiction` values in order.
 **Error behavior:** a non-empty `contradictions` array when `existing is None`
 raises `ArticleSchemaError`.
 

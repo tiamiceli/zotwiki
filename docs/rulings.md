@@ -178,3 +178,58 @@ TDD discipline applies: tester writes and commits red tests before coder writes 
 - (c) The `LLMClient` protocol and injection seam are unchanged.
 - (d) `sync` skips items with no citekey silently (not an error, not counted in summary totals).
 - (e) Default behavior (no `--update`) never overwrites an existing page.
+
+---
+
+## Ruling 5 — existing-article embed in update prompts must be compact JSON
+
+**Date:** 2026-06-15 · **Scope:** `compiler.py` prompt construction, contract §7.1/§5.5, plan-v1.2.md B4 · **Status:** binding.
+
+**1. Disposition: the existing article embedded in an update-mode prompt is
+serialized as the compact form
+`json.dumps(article_to_json_dict(existing), sort_keys=True)` — no `indent`.**
+
+During plan-v1.2 Phase B, the B4 refactor proposed re-serializing the embedded
+existing article with `indent=2`. This broke three tests (REQ-014 ×2, REQ-034):
+contract §7.1 requires the exact compact string
+`json.dumps(article_to_json_dict(existing), sort_keys=True)` to appear in the
+prompt **as a verbatim substring**, and an indented serialization is not a
+substring of that compact form. The compact form is retained.
+
+**2. Rationale — the two JSON roles in the prompt are deliberately different.**
+
+The prompt contains JSON in two distinct roles, formatted differently on purpose:
+
+- **Templates the LLM should _produce_** — the schema example (B1) and the
+  `Contradiction` example (B5). These are small and fixed-size; `indent=2` makes
+  their *structure* obvious, which is the point of an example. They are
+  "surrounding instruction text" and contract §7.1 leaves their format
+  unspecified.
+- **Data the LLM should _consume_** — the existing-article embed (B4). It can be
+  large (a mature article with many claims and quotes), the LLM only needs to
+  *parse* it, and indentation roughly doubles–triples its token count on every
+  update compile. There is no correctness benefit: the merge happens in Python
+  (`merge_articles`), not by the LLM re-serializing.
+
+The rule is therefore scoped narrowly: **only the existing-article embed must be
+compact.** The instruction-text examples (B1, B5) stay indented; de-indenting
+them would worsen the BUG-2 schema-error surface (the inverse error).
+
+**3. Documentation changes (binding):**
+
+- `contract.md §7.1`: the embed is the **compact** form (no `indent`); the exact
+  string must appear verbatim as a substring.
+- `contract.md §5.5`: the embed use is compact (no `indent`); the round-trip law
+  is unaffected.
+- `requirements.md REQ-014`: the "Then" clause names the compact form explicitly.
+- `plan-v1.2.md B4`: the `indent=2` instruction is corrected to compact.
+
+**4. Conditions (binding):**
+
+- (a) This rule applies **only** to the existing-article embed, not to the
+  instruction-text JSON examples (B1, B5), which remain indented.
+- (b) Changing the embed serialization (e.g. to indented) is a contract change
+  requiring a new ruling, a contract §7.1 amendment, and a tester update — it is
+  not a refactor.
+- (c) The compact-embed behavior is already pinned by the REQ-014/REQ-034 tests;
+  no new test is required.
