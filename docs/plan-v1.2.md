@@ -198,3 +198,10 @@ at field names (`citekey` vs `citekeys`) and allowed multi-line quote strings.
 **Mitigation applied (commit 555c02d):** Prompt now includes an explicit JSON
 shape example and a rule that quote text must be a single line. Schema errors
 are significantly reduced but may still occur occasionally on complex papers.
+
+**Further hardening (Phase B, commit e5669a0):** B1 now generates the JSON
+shape example from the real `Article`/`Claim`/`Quote`/`Section` dataclasses (so
+it cannot drift from `parse_article_json`), B2 derives an explicit citekey
+charset rule from `llm._CITEKEY_RE`, and B5 adds a concrete `Contradiction`
+JSON example to the update prompt. BUG-2 remains classified **mitigated (not
+fully fixed)**: residual schema errors are still possible on complex papers.

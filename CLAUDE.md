@@ -21,11 +21,15 @@ zotwiki/
 │   └── cli.py            # main() entry point; run() for pyproject.toml
 ├── tests/                # tester-owned; coder never writes here
 ├── docs/
-│   ├── contract.md       # binding wire/file/behavior spec (exhaustive)
-│   ├── requirements.md   # one observable REQ per behavior
-│   ├── rulings.md        # planner decisions; override contract where noted
-│   ├── plan-sync.md      # completed plan (sync subcommand, REQ-040–044)
-│   └── plan-v1.1.md      # completed plan (ClaudeCodeLLMClient, refactors)
+│   ├── contract.md         # binding wire/file/behavior spec (exhaustive)
+│   ├── requirements.md     # one observable REQ per behavior
+│   ├── rulings.md          # planner decisions; override contract where noted
+│   ├── plan.md             # completed plan (initial build, M1–M6)
+│   ├── plan-sync.md        # completed plan (sync subcommand, REQ-040–044)
+│   ├── plan-v1.1.md        # completed plan (ClaudeCodeLLMClient, refactors)
+│   ├── plan-v1.2.md        # completed plan (REQ-045 + prompt refactors); BUG-1/2 tracked
+│   ├── operator.md         # operator guide (drive zotwiki from another project)
+│   └── document-library.md # full repo file index by location
 └── pyproject.toml        # setuptools build; [project.scripts] zotwiki = cli:run
 ```
 
