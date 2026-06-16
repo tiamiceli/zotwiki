@@ -31,7 +31,7 @@ maker; `coder` = implementation author; `tester` = test suite author.
 | File | Owner | Purpose |
 |---|---|---|
 | `contract.md` | planner | The exhaustive wire/file/behavior specification. Defines data types (§2), the `ZoteroStore` protocol (§3), every Zotero HTTP endpoint the adapter calls (§4), the `LLMClient` protocol and compiled-article JSON schema (§5), the vault page format (§6), compiler semantics (§7), audit rules (§8), and CLI behavior (§9). Binding and exhaustive: silence = unspecified; speech = law. |
-| `requirements.md` | planner + tester | One observable REQ per behavior, expressed as Given/When/Then with explicit error cases. Currently 45 REQs (REQ-001–REQ-045). The tester reads only this file and `contract.md` before writing tests. |
+| `requirements.md` | planner + tester | One observable REQ per behavior, expressed as Given/When/Then with explicit error cases. Currently 48 REQs (REQ-001–REQ-048). The tester reads only this file and `contract.md` before writing tests. |
 | `rulings.md` | planner | Binding decisions that override or extend `contract.md`. Each ruling records the date, scope, rationale, exact contract/requirements changes, and conditions. Must be written before any contract change or new plan is authorized. |
 
 ### Plans (completed unless noted)
@@ -41,7 +41,8 @@ maker; `coder` = implementation author; `tester` = test suite author.
 | `plan.md` | planner | Original six-milestone plan (M1–M6) covering the full initial implementation: Zotero adapter, LLM boundary, compiler, publisher, auditor/contradiction handling, and CLI. Status: completed. |
 | `plan-sync.md` | planner | Plan for the `sync` subcommand (REQ-040–044): `collection_items`, `Syncer`, `sync` CLI flag. Status: completed. |
 | `plan-v1.1.md` | planner | Post-M6 plan authorized by Ruling 2: replaced `AnthropicLLMClient` with `ClaudeCodeLLMClient` (Phase A, TDD), plus infrastructure refactors (Phase B). Status: completed. |
-| `plan-v1.2.md` | planner | Plan authorized by Ruling 4: fulltext child-attachment fallback (REQ-045). Also covers the Phase B prompt-helper refactors (B1–B5) and the compact-embed rule (Ruling 5), plus BUG-1 (sync skip uses Zotero item title) and BUG-2 (LLM schema errors, mitigated). Status: Phase A + B complete; BUG-1 pending (needs ruling), BUG-2 mitigated. |
+| `plan-v1.2.md` | planner | Plan authorized by Ruling 4: fulltext child-attachment fallback (REQ-045). Also covers the Phase B prompt-helper refactors (B1–B5) and the compact-embed rule (Ruling 5), plus BUG-1 and BUG-2 (LLM schema errors, mitigated). Status: Phase A + B complete; BUG-1 resolved (Ruling 6, see `plan-bug1.md`); BUG-2 mitigated. |
+| `plan-bug1.md` | planner | Plan authorized by Ruling 6: BUG-1 fix — `sync` de-dups by Zotero `key` recorded in a new `zotero_keys` frontmatter field (schema `zotwiki: 2`), with the `--update` title-pin (REQ-046–048). Status: complete. |
 
 ### Guides
 

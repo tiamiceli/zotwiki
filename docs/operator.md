@@ -4,6 +4,14 @@ Copy this file into your research project's `CLAUDE.md` (or reference it) so Cla
 
 ZotWiki is a CLI tool that compiles a Zotero research library into an Obsidian-compatible wiki vault. Use it to add sources, sync a Zotero collection into wiki pages, audit vault integrity, and answer questions from the vault.
 
+---
+
+## Upgrading an existing vault (schema v2)
+
+ZotWiki now records each page's source Zotero item keys in frontmatter (`zotero_keys`; schema `zotwiki: 2`) and skips/updates by key, so re-syncing no longer creates duplicate pages. **This is a breaking format change:** pages written by an older ZotWiki (`zotwiki: 1`) report as `PAGE_UNPARSEABLE` under `audit` and are not recognized by `sync`. To migrate, **delete the vault's `*.md` files (or use a fresh vault) and re-run `sync`** — this rebuilds every page in the new format and clears any duplicates the old sync left behind.
+
+---
+
 ## Before running any command
 
 - **Zotero must be open.** The local API at `http://127.0.0.1:23119` must be reachable. If not, every command exits 2 with `error: Zotero unavailable ...`.

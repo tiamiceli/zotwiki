@@ -1,7 +1,7 @@
 # plan-bug1 — Sync de-dup by Zotero key (BUG-1)
 
 **Authorized by:** Ruling 6 (2026-06-15)
-**Status:** Planner ✅ · Tester ✅ (red gate verified) · **Coder ⬜ — START HERE**
+**Status:** complete — Planner ✅ · Tester ✅ · Coder ✅ · Docs ✅
 
 ---
 
@@ -45,7 +45,7 @@ the found page's title so the update lands in place (no duplicate, merge fires).
   diffs (`index 13: b'1' != b'2'`). `test_req_019` (macOS case-collision) is a
   pre-existing, unrelated known failure.
 
-### Coder ⬜ — RESUME HERE (read only `docs/contract.md`)
+### Coder ✅ (done — full suite green except the known `test_req_019`)
 
 Implement in `src/zotwiki/` (auditor.py / ask.py / models.py need **no** change
 — they inherit via the shared `_parse_frontmatter`/`parse_page`):

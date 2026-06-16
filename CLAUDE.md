@@ -130,7 +130,7 @@ ZotWikiError
 
 ## Current status
 
-All planned work is complete. The implemented subcommands are `ingest`, `compile`, `audit`, `ask`, and `sync`. 45 requirements are green (REQ-001–REQ-045); one pre-existing test failure (`test_req_019`) is a known macOS case-collision limitation.
+All planned work is complete. The implemented subcommands are `ingest`, `compile`, `audit`, `ask`, and `sync`. 48 requirements are green (REQ-001–REQ-048); one pre-existing test failure (`test_req_019`) is a known macOS case-collision limitation.
 
 To start new work: write a ruling in `docs/rulings.md`, update `docs/contract.md` and `docs/requirements.md`, then follow the planner → tester → coder sequence.
 

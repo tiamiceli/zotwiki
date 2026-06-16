@@ -183,6 +183,9 @@ for any item whose LLM-generated title differs from its Zotero title.
 items have been compiled (by citekey? by Zotero key? by persisting a manifest?)
 before a tester and coder can address it.
 
+**Resolved:** Ruling 6 — tracked by Zotero `key` in the `zotero_keys`
+frontmatter field (schema `zotwiki: 2`); see `plan-bug1.md` (REQ-046–048).
+
 ### BUG-2 — LLM sometimes produces invalid claim schema (addressed by prompt refactor)
 
 **Observed:** 2026-06-15 · **Status:** mitigated (not fully fixed)

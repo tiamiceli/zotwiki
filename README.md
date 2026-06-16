@@ -44,6 +44,12 @@ To update after pulling new changes:
 uv tool install . --reinstall
 ```
 
+> **Upgrading an existing vault:** this release changed the page frontmatter
+> format (schema `zotwiki: 2`). Pages written by older ZotWiki read as
+> unparseable to `audit`/`sync`. To migrate, delete the vault's `*.md` files
+> (or start a fresh vault) and re-run `sync` — this also clears any duplicate
+> pages left by the old title-based sync.
+
 ---
 
 ## How to use ZotWiki
