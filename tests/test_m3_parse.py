@@ -123,7 +123,7 @@ def _fm_strip_frontmatter(page: str, cited: list[str]) -> str:
 
 
 def _fm_unknown_key(page: str, cited: list[str]) -> str:
-    return page.replace("zotwiki: 1\n", 'zotwiki: 1\nextra: "x"\n', 1)
+    return page.replace("zotwiki: 2\n", 'zotwiki: 2\nextra: "x"\n', 1)
 
 
 def _fm_wrong_key_order(page: str, cited: list[str]) -> str:
@@ -151,7 +151,7 @@ def _fm_missing_required_key(page: str, cited: list[str]) -> str:
 
 
 def _fm_wrong_schema_version(page: str, cited: list[str]) -> str:
-    return page.replace("zotwiki: 1\n", "zotwiki: 2\n", 1)
+    return page.replace("zotwiki: 2\n", "zotwiki: 1\n", 1)
 
 
 def _fm_invalid_escape(page: str, cited: list[str]) -> str:

@@ -389,8 +389,8 @@ def test_req_028__garbage_page_flagged_and_others_still_audited(
 
 
 def _insert_unknown_frontmatter_key(text: str, article: Article) -> str:
-    assert text.count("zotwiki: 1\n") == 1
-    return text.replace("zotwiki: 1\n", 'zotwiki: 1\nstatus: "draft"\n', 1)
+    assert text.count("zotwiki: 2\n") == 1
+    return text.replace("zotwiki: 2\n", 'zotwiki: 2\nstatus: "draft"\n', 1)
 
 
 def _swap_created_updated(text: str, article: Article) -> str:

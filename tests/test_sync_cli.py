@@ -146,7 +146,8 @@ def test_req_041__sync_compiles_new_and_skips_existing(tmp_path, capsys):
     )
     transformer_page.write_text(
         render_page(existing_article, [transformer_item],
-                    created="2026-06-01", updated="2026-06-01"),
+                    created="2026-06-01", updated="2026-06-01",
+                    zotero_keys=["KEY00001"]),
         encoding="utf-8",
     )
     # Also write Index.md so audit doesn't care
@@ -209,7 +210,8 @@ def test_req_042__sync_update_recompiles_existing(tmp_path, capsys):
             links=(),
         )
         (vault / f"{item.title}.md").write_text(
-            render_page(art, [item], created="2026-06-01", updated="2026-06-01"),
+            render_page(art, [item], created="2026-06-01", updated="2026-06-01",
+                        zotero_keys=[item.key]),
             encoding="utf-8",
         )
 

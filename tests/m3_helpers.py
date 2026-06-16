@@ -11,9 +11,9 @@ absence reads as a per-test contract failure, not a collection error.
 Format decisions encoded here (all from contract SS6.1-SS6.3):
 
   - frontmatter: keys exactly (zotwiki, title, created, updated, citekeys,
-    tags) in that order; `zotwiki: 1` unquoted; strings double-quoted with
-    only \\ and \" escapes; block lists indented two spaces; empty list
-    inline as `citekeys: []`.
+    zotero_keys, tags) in that order; `zotwiki: 2` unquoted; strings
+    double-quoted with only \\ and \" escapes; block lists indented two
+    spaces; empty list inline as `citekeys: []` / `zotero_keys: []`.
   - body: blocks joined by exactly one blank line, starting with the block
     after the closing `---` (frontmatter is block zero of the join, per
     "each block separated by exactly one blank line"); LF only; no trailing
@@ -51,10 +51,10 @@ def cited_citekeys(article: Article) -> list[str]:
 
 
 def frontmatter_block(title: str, created: str, updated: str,
-                      citekeys: list[str]) -> str:
+                      citekeys: list[str], zotero_keys=()) -> str:
     lines = [
         "---",
-        "zotwiki: 1",
+        "zotwiki: 2",
         f"title: {fm_quote(title)}",
         f"created: {fm_quote(created)}",
         f"updated: {fm_quote(updated)}",
@@ -64,6 +64,12 @@ def frontmatter_block(title: str, created: str, updated: str,
         lines.extend(f"  - {fm_quote(ck)}" for ck in citekeys)
     else:
         lines.append("citekeys: []")
+    zkeys = sorted(set(zotero_keys))
+    if zkeys:
+        lines.append("zotero_keys:")
+        lines.extend(f"  - {fm_quote(zk)}" for zk in zkeys)
+    else:
+        lines.append("zotero_keys: []")
     lines.extend(["tags:", '  - "zotwiki"', "---"])
     return "\n".join(lines)
 
@@ -83,16 +89,17 @@ def reference_line(item: SourceItem) -> str:
 
 
 def render_oracle(article: Article, references, *, created: str,
-                  updated: str) -> str:
+                  updated: str, zotero_keys=()) -> str:
     """Independent canonical rendering per contract SS6.1-SS6.3.
 
     `references` may arrive in any order; the References block is emitted
-    sorted by citekey (SS6.3).
+    sorted by citekey (SS6.3).  `zotero_keys` are the source Zotero keys
+    recorded in frontmatter (SS6.2), emitted sorted and deduped.
     """
     cited = cited_citekeys(article)
     by_citekey = {item.citekey: item for item in references}
     blocks = [
-        frontmatter_block(article.title, created, updated, cited),
+        frontmatter_block(article.title, created, updated, cited, zotero_keys),
         f"# {article.title}",
         article.summary,
     ]
@@ -157,13 +164,16 @@ PINNED_REFS = (
 # (NOT produced by running any zotwiki code).
 PINNED_PAGE = (
     "---\n"
-    "zotwiki: 1\n"
+    "zotwiki: 2\n"
     'title: "Transformer"\n'
     'created: "2026-06-11"\n'
     'updated: "2026-06-11"\n'
     "citekeys:\n"
     '  - "doe2020attention"\n'
     '  - "vaswani2017attention"\n'
+    "zotero_keys:\n"
+    '  - "ABCD1234"\n'
+    '  - "WXYZ7890"\n'
     "tags:\n"
     '  - "zotwiki"\n'
     "---\n"
@@ -210,11 +220,12 @@ EMPTY_ARTICLE = Article(
 
 EMPTY_PAGE = (
     "---\n"
-    "zotwiki: 1\n"
+    "zotwiki: 2\n"
     'title: "Bare Notes"\n'
     'created: "2026-01-02"\n'
     'updated: "2026-03-04"\n'
     "citekeys: []\n"
+    "zotero_keys: []\n"
     "tags:\n"
     '  - "zotwiki"\n'
     "---\n"
@@ -232,8 +243,9 @@ EMPTY_PAGE = (
 
 # Internal consistency guard: the oracle must reproduce the hand-pinned
 # bytes.  Plain asserts (not tests): they protect the tester's own helpers.
-assert render_oracle(PINNED_ARTICLE, PINNED_REFS,
-                     created=PINNED_TODAY, updated=PINNED_TODAY) == PINNED_PAGE
+assert render_oracle(PINNED_ARTICLE, PINNED_REFS, created=PINNED_TODAY,
+                     updated=PINNED_TODAY,
+                     zotero_keys=("ABCD1234", "WXYZ7890")) == PINNED_PAGE
 assert render_oracle(EMPTY_ARTICLE, (),
                      created="2026-01-02", updated="2026-03-04") == EMPTY_PAGE
 

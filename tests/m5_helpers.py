@@ -84,11 +84,12 @@ def contradictions_oracle(calls, *, created: str, updated: str) -> str:
 
 _PINNED_INDEX = (
     "---\n"
-    "zotwiki: 1\n"
+    "zotwiki: 2\n"
     'title: "Index"\n'
     'created: "2026-06-11"\n'
     'updated: "2026-06-11"\n'
     "citekeys: []\n"
+    "zotero_keys: []\n"
     "tags:\n"
     '  - "zotwiki"\n'
     "---\n"
@@ -103,11 +104,12 @@ assert index_oracle(["Beta", "Alpha"], created="2026-06-11",
 
 _PINNED_CONTRADICTIONS = (
     "---\n"
-    "zotwiki: 1\n"
+    "zotwiki: 2\n"
     'title: "Contradictions"\n'
     'created: "2026-06-11"\n'
     'updated: "2026-06-11"\n'
     "citekeys: []\n"
+    "zotero_keys: []\n"
     "tags:\n"
     '  - "zotwiki"\n'
     "---\n"
