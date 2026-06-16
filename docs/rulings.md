@@ -233,3 +233,84 @@ them would worsen the BUG-2 schema-error surface (the inverse error).
   not a refactor.
 - (c) The compact-embed behavior is already pinned by the REQ-014/REQ-034 tests;
   no new test is required.
+
+---
+
+## Ruling 6 — BUG-1 fix: track compiled items by Zotero key in page frontmatter
+
+**Date:** 2026-06-15 · **Scope:** frontmatter §6.2, publisher §6.4/§6.5, compiler §7, CLI §9.2/§9.6, requirements REQ-046–048, plan-bug1.md · **Status:** binding.
+
+**1. Disposition: `sync` recognizes already-compiled items by Zotero item
+`key`, recorded in a new `zotero_keys` frontmatter field — replacing the
+title-based skip-check that causes BUG-1.**
+
+BUG-1 (duplicate pages on every sync) is a *drift* bug: the skip-check asked
+"does `{vault}/{Zotero title}.md` exist?", but pages are saved under the
+LLM-chosen title, which usually differs. The fix removes the divergent state
+rather than adding more — the pages themselves record which Zotero items
+produced them, and sync consults that.
+
+**2. Why in-page frontmatter (not a manifest or the Index).** A manifest is a
+*second* record of what is compiled, which can re-diverge from the actual vault
+— BUG-1's disease in a new costume. The Index is derived, byte-exact, and
+idempotent (REQ-022), regenerated from the *filename set*; putting keys in it
+would couple regeneration to page content and is the wrong layer ("what pages
+exist", not "what is compiled"). The pages are the single source of truth; the
+Zotero collection is the membership authority, so sync should *heal* a
+user-deleted page — which the in-page design does for free.
+
+**3. Why the Zotero `key` (not citekey, version, etc.).** The item `key` is
+permanent, client-generated, present on every item, and independent of the
+hosted-sync subscription. `version`/`library`/`links`/`meta` are sync-managed;
+the citekey (`extra` / native `citationKey`) is user-editable. (See this
+session's field-reliability analysis.)
+
+**4. Ground truth, not "cited-by".** `zotero_keys` come from the actual keys
+passed to `compile` (`CompileResult.zotero_keys` → `publish(zotero_keys=)`), not
+from resolving the article's citekeys (the References block records "cited by"
+and can diverge from "compiled from").
+
+**5. Breaking change (conscious decision): schema `zotwiki: 1` → `zotwiki: 2`.**
+`zotero_keys` is a required §6.2 field; the strict parser rejects pages without
+it, so legacy `zotwiki: 1` pages become `PAGE_UNPARSEABLE`. Migration =
+regenerate the vault (delete `*.md` and re-sync, or use a fresh vault), which
+also clears existing BUG-1 duplicates. A tolerant/optional field was rejected:
+legacy pages would still duplicate on the next sync (their items aren't
+tracked), so regeneration is needed either way — required+v2 is the coherent
+version.
+
+**6. The `--update` title-pin (correctness).** `publish` derives the page path
+from `article.title`. On `--update`, after finding page `P` by key, the compiled
+article's title is pinned to `P`'s title (`dataclasses.replace`) before publish,
+so the update lands in `P` (the §7.2 merge fires, never-clobber preserved)
+instead of writing a duplicate under a drifted LLM title. Sync does **not**
+error on title drift (unlike `compile --page`).
+
+**7. New-item title collision (deliberate).** A new (uncompiled) item whose LLM
+title exactly equals an existing page merges into it, unioning `zotero_keys`, per
+§6.5 existing-title semantics — same title = same article. Case-variant titles
+still raise `VaultError` (§6.5).
+
+**8. Contract changes (binding):** §6.2 (add `zotero_keys` after `citekeys`,
+before `tags`; bump to `zotwiki: 2`; empty → `zotero_keys: []`), §6.4
+(`render_page` gains `zotero_keys`; round-trip law unaffected), §6.5 (`publish`
+gains `zotero_keys`; new-page write and update-union rules; new
+`compiled_keys()`), §6.7/§6.8 (`zotero_keys: []` on Index/Contradictions), §7
+(`CompileResult.zotero_keys`), §9.2 (compile passes `result.zotero_keys`), §9.6
+(sync skip/update keyed on Zotero key + the title-pin), plus a migration note.
+
+**9. Requirements added (binding):** REQ-046, REQ-047, REQ-048.
+
+**10. Conditions (binding):**
+- (a) `zotero_keys` = sorted, deduped of the keys passed to `compile`.
+- (b) Update writes the sorted union `existing ∪ new` (never-clobber).
+- (c) `auditor` and `ask` require **no** source change — they read frontmatter
+  via the shared `_parse_frontmatter`/`parse_page` and inherit the new field; no
+  new audit code in this cycle.
+- (d) TDD: the tester writes REQ-046/047/048 tests **and** retrofits every
+  frontmatter byte-oracle to the v2 + `zotero_keys` format; the red gate must
+  fail before the coder writes code.
+- (e) Existing rendering/parse/index REQs (REQ-017/020/021/022) keep their
+  statements; only their byte-oracles change to the §6.2 v2 format.
+- (f) Only `compiler.py`, `publisher.py`, `syncer.py`, `cli.py` change; no new
+  runtime dependency (`dataclasses` is stdlib); the injection seam is untouched.

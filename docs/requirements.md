@@ -520,4 +520,57 @@ REQ-008.
 
 ---
 
-Total: 45 requirements (REQ-001 … REQ-045).
+## J. Compiled-item tracking (BUG-1)
+
+### REQ-046 — Page frontmatter records source Zotero keys (schema v2)
+**Given** a canonical `Article`, matching `references`, and a sequence `Z` of
+Zotero item keys,
+**When** `render_page(article, references, created=c, updated=u, zotero_keys=Z)`
+is called,
+**Then** the frontmatter opens with `zotwiki: 2`, and a `zotero_keys` entry
+appears in canonical order **after `citekeys` and before `tags`**, listing the
+keys sorted ascending and deduplicated (block list `  - "KEY"`, or inline
+`zotero_keys: []` when `Z` is empty); and the round-trip law holds —
+`parse_page(render_page(a, refs, created=c, updated=u, zotero_keys=Z)) == a` for
+any `Z` (the field is frontmatter-only and does not appear in the `Article`).
+**Error behavior:** a page whose first frontmatter line is not `zotwiki: 2`, or
+that omits `zotero_keys`, or has it out of canonical order, raises
+`PageParseError` — so legacy `zotwiki: 1` pages (no `zotero_keys`) are rejected.
+
+### REQ-047 — `CompileResult` carries source keys; `publish` writes and unions them
+**Given** `Compiler(store, llm).compile(keys, existing)` called with Zotero item
+keys,
+**When** it returns,
+**Then** `CompileResult.zotero_keys == tuple(sorted(set(keys)))`.
+**And given** `VaultPublisher.publish(article, zotero_keys=Z)`:
+**When** the target page does not exist, **then** the written frontmatter's
+`zotero_keys` is `sorted(set(Z))`.
+**When** the target page already exists, **then** the article is merged per §7.2
+and the written frontmatter's `zotero_keys` is `sorted(set(existing) | set(Z))`
+(never-clobber union).
+**When** a new compile's title exactly equals an existing page's title, **then**
+it merges into that page and unions `zotero_keys` (same title = same article).
+**Error behavior:** a case-variant (not byte-equal) title collision raises
+`VaultError` (§6.5); an unparseable existing page raises `PageParseError` with
+the file untouched.
+
+### REQ-048 — `sync` de-duplicates by Zotero key (BUG-1 fixed)
+**Given** a collection item whose Zotero key already appears in some page's
+`zotero_keys` (it was compiled earlier, possibly under a different LLM title),
+**When** `sync` runs **without** `--update`,
+**Then** the item is skipped (`skipped\t{Zotero title}\n`), counted as skipped,
+and no second page is created — even though recompiling would yield a different
+title.
+**When** `sync` runs **with** `--update`,
+**Then** the page whose `zotero_keys` contains the item's key is recompiled and
+updated **in place**: the compiled article's title is pinned to that page's
+title (no duplicate), the §7.2 merge applies, `zotero_keys` is unioned, and
+stdout is `compiled\t{page title}\t{path}\n`.
+**And given** a collection item whose key is in **no** page's `zotero_keys`,
+**When** `sync` runs, **then** it is compiled into a page that records its key.
+**Error behavior:** `ArticleSchemaError` mid-sync → `error: {message}` on
+stderr, exit 1 immediately (unchanged).
+
+---
+
+Total: 48 requirements (REQ-001 … REQ-048).

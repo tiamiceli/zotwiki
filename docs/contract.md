@@ -545,26 +545,34 @@ Exactly this shape, keys in exactly this order, nothing else:
 
 ```
 ---
-zotwiki: 1
+zotwiki: 2
 title: "Transformer"
 created: "2026-06-11"
 updated: "2026-06-11"
 citekeys:
   - "doe2020attention"
   - "vaswani2017attention"
+zotero_keys:
+  - "9ATHNWVW"
+  - "MVIK8GJJ"
 tags:
   - "zotwiki"
 ---
 ```
 
-- `zotwiki`: literal int `1` (schema version), unquoted.
+- `zotwiki`: literal int `2` (schema version), unquoted. DECISION (Ruling 6):
+  the schema bumped from `1` when `zotero_keys` was added; `zotwiki: 1` pages
+  (no `zotero_keys`) are invalid and must be regenerated (§6.9).
 - All strings double-quoted; `\` and `"` escaped as `\\` and `\"`; no other
   escapes are emitted, and the parser accepts only those two.
 - Dates are `YYYY-MM-DD` strings.
 - Lists: block style, items indented two spaces as `  - "value"`. An empty
-  list is rendered inline as `citekeys: []` (same for `tags`, though `tags`
-  is always exactly `["zotwiki"]` on pages ZotWiki writes).
+  list is rendered inline as `citekeys: []` (same for `zotero_keys` and `tags`,
+  though `tags` is always exactly `["zotwiki"]` on pages ZotWiki writes).
 - `citekeys` = sorted union of all claim citekeys on the page.
+- `zotero_keys` = the Zotero item keys this page was compiled from (Ruling 6),
+  sorted ascending and deduplicated; `Index.md` and `Contradictions.md` carry
+  `zotero_keys: []`.
 - The parser (`parse_page`, auditor) accepts only this subset; anything else
   (unknown key, wrong order, flow lists with content, unquoted strings) →
   `PageParseError`.
@@ -635,6 +643,7 @@ def render_page(
     *,
     created: str,            # "YYYY-MM-DD"
     updated: str,            # "YYYY-MM-DD"
+    zotero_keys: Sequence[str] = (),   # source Zotero item keys (§6.2)
 ) -> str
 ```
 
@@ -652,8 +661,10 @@ lines are parsed only to the extent of validating the line shape; their
 content is *not* represented in `Article` (it is recomputed at render time).
 Violations of §6.2/§6.3 → `PageParseError`.
 
-**Round-trip law:** for every canonical `Article` `a` and matching `refs`:
-`parse_page(render_page(a, refs, created=c, updated=u)) == a`.
+**Round-trip law:** for every canonical `Article` `a`, matching `refs`, and any
+`zotero_keys` `z`: `parse_page(render_page(a, refs, created=c, updated=u,
+zotero_keys=z)) == a`. `render_page` emits `zotero_keys` sorted and deduped; the
+field is frontmatter-only and never appears in the returned `Article`.
 
 ### 6.5 `VaultPublisher`
 
@@ -661,29 +672,38 @@ Violations of §6.2/§6.3 → `PageParseError`.
 class VaultPublisher:
     def __init__(self, vault_dir: Path, store: ZoteroStore, *, today: str | None = None) -> None
     def page_path(self, title: str) -> Path
-    def publish(self, article: Article) -> Path
+    def publish(self, article: Article, *, zotero_keys: Sequence[str] = ()) -> Path
     def publish_contradictions(self, page_title: str,
                                contradictions: Sequence[Contradiction]) -> Path
+    def compiled_keys(self) -> dict[str, Path]
 ```
 
 - `today` defaults to the real current date as `YYYY-MM-DD`; tests pass a
   fixed value. The constructor creates `vault_dir` (parents included) if
   missing.
 - `publish` resolves every cited citekey via `store.resolve` (propagating
-  `CitekeyNotFoundError` / `ZoteroUnavailableError`), then:
-  - **New page** (no `{title}.md`): write
-    `render_page(article, refs, created=today, updated=today)`. Case
-    collision (an existing `.md` whose stem casefold-equals the title but is
-    not byte-equal) → `VaultError`, nothing written.
+  `CitekeyNotFoundError` / `ZoteroUnavailableError`), then (with
+  `keys = sorted(set(zotero_keys))`):
+  - **New page** (no `{title}.md`): write `render_page(article, refs,
+    created=today, updated=today, zotero_keys=keys)`. Case collision (an
+    existing `.md` whose stem casefold-equals the title but is not byte-equal)
+    → `VaultError`, nothing written.
   - **Existing page**: `existing = parse_page(file)` (failure →
     `PageParseError`, file untouched); `merged = merge_articles(existing,
-    article)`; render with `created` = the existing page's frontmatter
-    `created`. If rendering `merged` with `updated` = the existing
-    frontmatter `updated` reproduces the current file byte-for-byte, **do not
-    write** (idempotence; the old `updated` stands). Otherwise write with
+    article)`; the page's `zotero_keys` become the sorted union of the existing
+    page's frontmatter `zotero_keys` and `keys` (never-clobber). Render with
+    `created` = the existing page's frontmatter `created`. If rendering `merged`
+    with `updated` = the existing frontmatter `updated` and the unioned
+    `zotero_keys` reproduces the current file byte-for-byte, **do not write**
+    (idempotence; the old `updated` stands). Otherwise write with
     `updated = today`.
   - After any publish (including no-op), regenerate `Index.md` (§6.7) with
     the same change-detection rule (rewrite only if its rendering differs).
+- `compiled_keys()` scans every `*.md` in the vault root and returns a dict
+  mapping each Zotero key found in a page's frontmatter `zotero_keys` to that
+  page's `Path`; if a key appears on more than one page, the lexicographically
+  smallest filename wins. `Index.md`/`Contradictions.md` contribute nothing
+  (`zotero_keys: []`); unparseable pages are skipped. Used by the syncer (§9.6).
 - Returns the page path.
 
 ### 6.6 References resolution
@@ -694,7 +714,7 @@ publish-time resolution is a convenience fail-fast, not the gate.)
 
 ### 6.7 `Index.md` layout
 
-Frontmatter per §6.2 with `title: "Index"`, `citekeys: []`,
+Frontmatter per §6.2 with `title: "Index"`, `citekeys: []`, `zotero_keys: []`,
 `tags: ["zotwiki"]`, dates managed like any page (`created` on first write,
 `updated` bumped only on change). Body:
 
@@ -711,8 +731,9 @@ except `Index.md` and `Contradictions.md`), sorted by title. Empty vault →
 
 ### 6.8 `Contradictions.md` layout
 
-Frontmatter per §6.2 with `title: "Contradictions"`, `citekeys: []`. Body
-starts `# Contradictions`, then appended blocks (never rewritten or
+Frontmatter per §6.2 with `title: "Contradictions"`, `citekeys: []`,
+`zotero_keys: []`. Body starts `# Contradictions`, then appended blocks (never
+rewritten or
 reordered), one per `publish_contradictions` call:
 
 ```
