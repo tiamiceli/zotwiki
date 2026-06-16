@@ -749,6 +749,15 @@ heading). The `[@…]` suffix uses the §6.3 claim-suffix format. Calling with
 an empty sequence → `ValueError`. The targeted entity page is **never**
 modified by this method.
 
+### 6.9 Schema migration (`zotwiki: 1` → `zotwiki: 2`)
+
+Ruling 6 added the required `zotero_keys` field and bumped the schema to
+`zotwiki: 2`. There is no in-place migration: a page written by an older
+ZotWiki (`zotwiki: 1`, no `zotero_keys`) fails frontmatter parsing and audits as
+`PAGE_UNPARSEABLE`. To adopt the new format, regenerate the affected pages —
+delete the vault's `*.md` files (or use a fresh vault) and re-run `sync`.
+Regeneration also clears duplicate pages left by BUG-1.
+
 ---
 
 ## 7. Compiler and incremental semantics (`zotwiki.compiler`)
@@ -760,6 +769,7 @@ FULLTEXT_PROMPT_LIMIT = 20000   # characters per item in the prompt
 class CompileResult:
     article: Article
     contradictions: tuple[Contradiction, ...]
+    zotero_keys: tuple[str, ...]   # sorted, deduped keys passed to compile (§6.2)
 
 class Compiler:
     def __init__(self, store: ZoteroStore, llm: LLMClient) -> None
@@ -782,7 +792,8 @@ class Compiler:
    parse_article_json(raw)`.
 4. If `existing is None` and `contradictions` is non-empty →
    `ArticleSchemaError`.
-5. Return `CompileResult(article, contradictions)`.
+5. Return `CompileResult(article, contradictions,
+   zotero_keys=tuple(sorted(set(keys))))` — `keys` being the input Zotero keys.
 
 The compiler does **not** merge and does **not** touch the vault.
 
@@ -938,7 +949,8 @@ stdout on success: exactly `"{citekey}\t{key}\n"`. Exit 0.
    `parse_page` it; else `None`.
 3. `result = Compiler(store, llm).compile(keys, existing)`. If `--page` is
    given and `result.article.title != PAGE` → exit 1, nothing written.
-4. `VaultPublisher(vault, store, today=--today).publish(result.article)`;
+4. `VaultPublisher(vault, store, today=--today).publish(result.article,
+   zotero_keys=result.zotero_keys)`;
    stdout line `"compiled\t{title}\t{path}\n"`.
 5. If `result.contradictions`: `publish_contradictions(title, …)`; stdout
    line `"contradictions\t{title}\t{count}\n"`.
@@ -983,13 +995,21 @@ Algorithm:
 1. Verify `--vault DIR` exists; else `VaultError` → exit 2.
 2. `items = store.collection_items(NAME)`. `CollectionNotFoundError` → stderr
    `error: collection {NAME!r} not found`, exit 2.
-3. For each item in `items`, in order:
+3. Compute `known = publisher.compiled_keys()` once (§6.5): the map from each
+   already-recorded Zotero key to its page path. Then, for each item in `items`,
+   in order:
    - If `item.citekey == ""`: skip silently (no stdout line, not counted).
-   - Else if `{vault}/{title}.md` exists and `--update` is not set:
+   - Else if `item.key in known` and `--update` is not set:
      stdout `"skipped\t{title}\n"`, increment skipped count.
-   - Else: `result = Compiler(store, llm).compile([item.key], existing)` where
-     `existing` is the parsed existing page when `--update` and the page exists,
-     else `None`; then `VaultPublisher(vault, store, today=--today).publish(result.article)`;
+   - Else:
+     - `existing` = the parsed page `known[item.key]` when `item.key in known`
+       (an `--update` of an already-compiled item), else `None`.
+     - `result = Compiler(store, llm).compile([item.key], existing)`.
+     - **Title pin:** when `existing is not None`, `article =
+       dataclasses.replace(result.article, title=existing.title)` so the update
+       lands on that page (no duplicate; §7.2 merge fires); otherwise use
+       `result.article`. Then `VaultPublisher(vault, store,
+       today=--today).publish(article, zotero_keys=result.zotero_keys)`;
      stdout `"compiled\t{title}\t{path}\n"`, increment compiled count.
      If `result.contradictions`: `publish_contradictions(title, …)`;
      stdout `"contradictions\t{title}\t{count}\n"`.
@@ -997,9 +1017,12 @@ Algorithm:
 4. Final stdout line (always): `"sync: {compiled} compiled, {skipped} skipped\n"`.
 5. Exit 0.
 
-DECISION: the `title` used in the `skipped` line is the item's Zotero title, not
-a page title derived from LLM output. DECISION: citekey-less items are not counted
-in either total — they do not appear in the summary denominator.
+DECISION (Ruling 6): an item is "already compiled" iff its Zotero `key` is in
+some page's frontmatter `zotero_keys` (`compiled_keys()`), **not** by matching
+its title — this is the BUG-1 fix. The `title` in the `skipped` line is the
+item's Zotero title. On `--update`, the compiled article's title is pinned to the
+existing page's title (sync never errors on title drift, unlike `compile
+--page`). DECISION: citekey-less items are not counted in either total.
 
 `SyncReport` is returned by `Syncer.sync` (internal use; not printed by CLI):
 
