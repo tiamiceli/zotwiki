@@ -55,11 +55,15 @@ def _cited_citekeys(article: Article) -> list[str]:
 
 
 def _frontmatter_block(
-    title: str, created: str, updated: str, citekeys: Sequence[str]
+    title: str,
+    created: str,
+    updated: str,
+    citekeys: Sequence[str],
+    zotero_keys: Sequence[str] = (),
 ) -> str:
     lines = [
         "---",
-        "zotwiki: 1",
+        "zotwiki: 2",
         f"title: {_fm_quote(title)}",
         f"created: {_fm_quote(created)}",
         f"updated: {_fm_quote(updated)}",
@@ -69,6 +73,12 @@ def _frontmatter_block(
         lines.extend(f"  - {_fm_quote(ck)}" for ck in citekeys)
     else:
         lines.append("citekeys: []")
+    zkeys = sorted(set(zotero_keys))
+    if zkeys:
+        lines.append("zotero_keys:")
+        lines.extend(f"  - {_fm_quote(zk)}" for zk in zkeys)
+    else:
+        lines.append("zotero_keys: []")
     lines.extend(["tags:", '  - "zotwiki"', "---"])
     return "\n".join(lines)
 
@@ -93,6 +103,7 @@ def render_page(
     *,
     created: str,
     updated: str,
+    zotero_keys: Sequence[str] = (),
 ) -> str:
     """Render an article to the canonical page bytes (contract SS6.4).
 
@@ -114,7 +125,7 @@ def render_page(
         raise VaultError(f"references include uncited citekeys: {', '.join(extra)}")
 
     blocks = [
-        _frontmatter_block(article.title, created, updated, cited),
+        _frontmatter_block(article.title, created, updated, cited, zotero_keys),
         f"# {article.title}",
         article.summary,
     ]
@@ -179,8 +190,8 @@ def _parse_frontmatter(lines: Sequence[str]) -> tuple[dict, int]:
 
     if line_at(0, "frontmatter opening") != "---":
         raise PageParseError("page must open with a '---' frontmatter block")
-    if line_at(1, "zotwiki key") != "zotwiki: 1":
-        raise PageParseError("first frontmatter key must be exactly 'zotwiki: 1'")
+    if line_at(1, "zotwiki key") != "zotwiki: 2":
+        raise PageParseError("first frontmatter key must be exactly 'zotwiki: 2'")
     i = 2
     values: dict = {}
     for key in ("title", "created", "updated"):
@@ -193,7 +204,7 @@ def _parse_frontmatter(lines: Sequence[str]) -> tuple[dict, int]:
     for key in ("created", "updated"):
         if not _DATE_RE.fullmatch(values[key]):
             raise PageParseError(f"frontmatter {key!r} must be a YYYY-MM-DD date")
-    for key in ("citekeys", "tags"):
+    for key in ("citekeys", "zotero_keys", "tags"):
         line = line_at(i, f"frontmatter key {key!r}")
         if line == f"{key}: []":
             values[key] = []
@@ -460,7 +471,7 @@ class VaultPublisher:
     def _md_stems(self) -> list[str]:
         return [p.stem for p in self._vault.glob("*.md") if p.is_file()]
 
-    def publish(self, article: Article) -> Path:
+    def publish(self, article: Article, *, zotero_keys: Sequence[str] = ()) -> Path:
         title = article.title
         path = self.page_path(title)
         stems = self._md_stems()
@@ -471,8 +482,10 @@ class VaultPublisher:
             fm, _ = _parse_frontmatter(current.split("\n"))
             existing = parse_page(current)  # PageParseError -> file untouched
             merged = merge_articles(existing, article)
+            page_keys = sorted(set(fm["zotero_keys"]) | set(zotero_keys))
         else:
             merged = article
+            page_keys = sorted(set(zotero_keys))
 
         # SS6.6: resolve the merged article's citekeys, sorted ascending.
         references = tuple(
@@ -481,7 +494,8 @@ class VaultPublisher:
 
         if exists:
             unchanged = render_page(
-                merged, references, created=fm["created"], updated=fm["updated"]
+                merged, references, created=fm["created"], updated=fm["updated"],
+                zotero_keys=page_keys,
             )
             if unchanged != current:
                 _write_text(
@@ -491,6 +505,7 @@ class VaultPublisher:
                         references,
                         created=fm["created"],
                         updated=self._today,
+                        zotero_keys=page_keys,
                     ),
                 )
         else:
@@ -503,12 +518,30 @@ class VaultPublisher:
             _write_text(
                 path,
                 render_page(
-                    article, references, created=self._today, updated=self._today
+                    article, references, created=self._today,
+                    updated=self._today, zotero_keys=page_keys,
                 ),
             )
 
         self._regenerate_index()
         return path
+
+    def compiled_keys(self) -> dict[str, Path]:
+        """Map each Zotero key recorded in a page's frontmatter `zotero_keys`
+        to that page's path (contract SS6.5).  Lexicographically-smallest
+        filename wins on collision; unparseable pages are skipped;
+        Index.md / Contradictions.md contribute nothing (`zotero_keys: []`)."""
+        out: dict[str, Path] = {}
+        for path in sorted(self._vault.glob("*.md"), key=lambda p: p.name):
+            if not path.is_file():
+                continue
+            try:
+                fm, _ = _parse_frontmatter(_read_text(path).split("\n"))
+            except PageParseError:
+                continue
+            for key in fm["zotero_keys"]:
+                out.setdefault(key, path)
+        return out
 
     def publish_contradictions(
         self, page_title: str, contradictions: Sequence[Contradiction]

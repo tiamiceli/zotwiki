@@ -83,7 +83,7 @@ def test_req_038__full_cli_loop_offline_touches_no_socket(
     assert len(lines) == 1
     assert_compiled_line(lines[0], title=title, vault=vault)
     expected_page = render_oracle(article, [item], created=TODAY,
-                                  updated=TODAY)
+                                  updated=TODAY, zotero_keys=[item.key])
     assert (vault / f"{title}.md").read_bytes() == expected_page.encode("utf-8")
     assert llm.prompts != []
 
@@ -202,7 +202,7 @@ def test_req_038__no_llm_construction_when_llm_injected(
     assert rc == 0
     assert llm.prompts != []  # the injected fake answered ...
     expected_page = render_oracle(article, [item], created=TODAY,
-                                  updated=TODAY)
+                                  updated=TODAY, zotero_keys=[item.key])
     assert (vault / f"{title}.md").read_bytes() == expected_page.encode("utf-8")
     assert (vault / "Index.md").read_bytes() == index_oracle(
         [title], created=TODAY, updated=TODAY).encode("utf-8")

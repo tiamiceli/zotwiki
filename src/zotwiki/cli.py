@@ -139,7 +139,7 @@ def _cmd_compile(
 
     # Steps 4 + 5: publish, then route contradictions.
     publisher = VaultPublisher(vault, store, today=args.today)
-    path = publisher.publish(result.article)
+    path = publisher.publish(result.article, zotero_keys=result.zotero_keys)
     sys.stdout.write(f"compiled\t{title}\t{path}\n")
     if result.contradictions:
         publisher.publish_contradictions(title, result.contradictions)

@@ -48,7 +48,8 @@ def _require_m3_surface():
 
 def test_req_017__pinned_contract_example_renders_byte_exact():
     out = render_page(
-        PINNED_ARTICLE, PINNED_REFS, created=PINNED_TODAY, updated=PINNED_TODAY
+        PINNED_ARTICLE, PINNED_REFS, created=PINNED_TODAY, updated=PINNED_TODAY,
+        zotero_keys=("ABCD1234", "WXYZ7890"),
     )
     assert out == PINNED_PAGE
 
@@ -136,6 +137,7 @@ def test_req_017__frontmatter_citekeys_are_sorted_deduped_union():
         '  - "aaa2020alpha"\n'
         '  - "bbb2019beta"\n'
         '  - "ccc2021gamma"\n'
+        "zotero_keys: []\n"
         "tags:"
     ) in out
     assert out.count('  - "bbb2019beta"') == 1  # deduped in frontmatter

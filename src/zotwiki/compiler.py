@@ -85,6 +85,7 @@ _BASE_INSTRUCTIONS = (
 class CompileResult:
     article: Article
     contradictions: tuple[Contradiction, ...]
+    zotero_keys: tuple[str, ...]
 
 
 class Compiler:
@@ -117,7 +118,11 @@ class Compiler:
                 "contradictions: not permitted when compiling without an "
                 "existing article"
             )
-        return CompileResult(article=article, contradictions=contradictions)
+        return CompileResult(
+            article=article,
+            contradictions=contradictions,
+            zotero_keys=tuple(sorted(set(keys))),
+        )
 
 
 def _update_instructions_with_schema() -> str:

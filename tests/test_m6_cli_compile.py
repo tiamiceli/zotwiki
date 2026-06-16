@@ -93,7 +93,8 @@ def test_req_033__compile_key_creates_page_and_index_exit_0(
     page = vault / f"{title}.md"
     items = {ck_a: item_a, ck_b: item_b}
     expected = render_oracle(article, refs_for(article, items),
-                             created=TODAY, updated=TODAY)
+                             created=TODAY, updated=TODAY,
+                             zotero_keys=sorted({item_a.key, item_b.key}))
     assert page.read_bytes() == expected.encode("utf-8")
     assert (vault / "Index.md").read_bytes() == index_oracle(
         [title], created=TODAY, updated=TODAY).encode("utf-8")
@@ -263,7 +264,8 @@ def test_req_034__compile_page_merges_appends_contradictions_audits_clean(
     merged = expected_merge(existing, update)
     items = {ck1: item_one, ck2: item_two}
     expected_page = render_oracle(merged, refs_for(merged, items),
-                                  created=TODAY, updated=LATER)
+                                  created=TODAY, updated=LATER,
+                                  zotero_keys=sorted({item_one.key, item_two.key}))
     assert (vault / f"{title}.md").read_bytes() == expected_page.encode("utf-8")
 
     # REQ-031 via CLI: append-only Contradictions.md per SS6.8.

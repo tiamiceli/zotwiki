@@ -109,7 +109,8 @@ def test_req_037__ingest_compile_audit_corrupt_audit_ask_full_loop(
         has_fulltext=True,
     )
     expected_page = render_oracle(article, [ingested_item],
-                                  created=TODAY, updated=TODAY)
+                                  created=TODAY, updated=TODAY,
+                                  zotero_keys=[ingested_item.key])
     assert (vault / f"{page_title}.md").read_bytes() == (
         expected_page.encode("utf-8")
     )

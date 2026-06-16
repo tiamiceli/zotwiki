@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from zotwiki.compiler import Compiler
@@ -49,25 +49,29 @@ class Syncer:
         """
         items = self._store.collection_items(name)
         publisher = VaultPublisher(self._vault, self._store, today=self._today)
+        known = publisher.compiled_keys()
         compiled = 0
         skipped = 0
         for item in items:
             if not item.citekey:
                 continue
-            page_path = publisher.page_path(item.title)
-            if page_path.exists() and not update:
+            existing_path = known.get(item.key)
+            if existing_path is not None and not update:
                 skipped += 1
                 if on_skipped is not None:
                     on_skipped(item.title)
                 continue
             existing = None
-            if page_path.exists() and update:
-                existing = parse_page(page_path.read_text(encoding="utf-8"))
+            if existing_path is not None:
+                existing = parse_page(existing_path.read_text(encoding="utf-8"))
             result = Compiler(self._store, self._llm).compile([item.key], existing)
-            path = publisher.publish(result.article)
+            article = result.article
+            if existing is not None:
+                article = replace(article, title=existing.title)
+            path = publisher.publish(article, zotero_keys=result.zotero_keys)
             if result.contradictions:
-                publisher.publish_contradictions(result.article.title, result.contradictions)
+                publisher.publish_contradictions(article.title, result.contradictions)
             compiled += 1
             if on_compiled is not None:
-                on_compiled(result.article.title, path, result.contradictions)
+                on_compiled(article.title, path, result.contradictions)
         return SyncReport(compiled=compiled, skipped=skipped)

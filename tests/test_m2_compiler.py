@@ -88,7 +88,8 @@ def test_req_013__prompt_has_citekey_title_and_truncated_fulltext(fake_zotero, z
     assert isinstance(result, CompileResult)
     assert result.article == expected_article
     assert result.contradictions == ()
-    assert result == CompileResult(article=expected_article, contradictions=())
+    assert result == CompileResult(article=expected_article, contradictions=(),
+                                   zotero_keys=(key,))
 
 
 def test_req_013__short_fulltext_is_included_whole(fake_zotero, zstore):
