@@ -58,6 +58,7 @@ Coder    →  Implementation that makes the tests pass
 
 - Reads only `docs/contract.md` and `docs/requirements.md`. Does not read source.
 - Writes tests in `tests/` that **must fail** before committing (red gate). If a test passes without code changes, it is wrong.
+- A change to a **shared format** (frontmatter, page bytes, a dataclass shape) breaks more test sites than the oracle helpers (`m3_helpers`/`m5_helpers`): also retrofit direct dataclass constructions and inline expected-page builders (e.g. `render_oracle(...)` in the m6 CLI tests). At the red gate, confirm each failure would flip to green with correct code — a red that *stays* red is a tester-incomplete test, not feature-absence. (The BUG-1 cycle missed 8 such sites and only caught them mid-coder.)
 - Commits the failing tests before the coder writes a line.
 - Tester owns `tests/`. The coder never writes or edits test files.
 
@@ -130,7 +131,7 @@ ZotWikiError
 
 ## Current status
 
-All planned work is complete. The implemented subcommands are `ingest`, `compile`, `audit`, `ask`, and `sync`. 48 requirements are green (REQ-001–REQ-048); one pre-existing test failure (`test_req_019`) is a known macOS case-collision limitation.
+All planned work through BUG-1 is complete. The implemented subcommands are `ingest`, `compile`, `audit`, `ask`, and `sync`. 48 requirements are green (REQ-001–REQ-048); the suite baseline is **387 passed, 1 failed** — the one failure (`test_req_019`) is a known, accepted macOS case-collision limitation, not a regression. BUG-1 (sync duplicate pages) is fixed (Ruling 6, `docs/plan-bug1.md`). Known-open item: BUG-2 (occasional LLM schema errors — mitigated, not fully fixed; see `docs/plan-v1.2.md`).
 
 To start new work: write a ruling in `docs/rulings.md`, update `docs/contract.md` and `docs/requirements.md`, then follow the planner → tester → coder sequence.
 
