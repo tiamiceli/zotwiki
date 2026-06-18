@@ -1096,3 +1096,55 @@ def ask(vault_dir: Path, question: str, llm: LLMClient) -> Answer
    adapter from §3–§4 alone; pages written by §6 are parsed by §6 and
    audited by §8 with no shared private helpers beyond the public surface
    in §1.1.
+
+## 11. Operator terminal wrapper (`scripts/zw`)
+
+`scripts/zw` is a POSIX-`bash` wrapper (not part of the Python package) that
+provides short directives for operating zotwiki from a plain terminal. It
+**composes** the public CLI of §9 and adds no behavior beyond what is specified
+here. The installed `zotwiki` console script (`[project.scripts]`) must be on
+`PATH`; `zw` invokes it by name.
+
+### 11.1 Configuration
+
+- **`ZOTWIKI_VAULT`** (environment variable, required for every directive except
+  `ingest` and the usage path): the absolute vault directory. If a directive that
+  needs it runs with `ZOTWIKI_VAULT` unset or empty, `zw` writes exactly one line
+  to **stderr** and exits **2** (environment failure, matching §9.3), and does
+  **not** invoke `zotwiki`.
+
+### 11.2 Directives (exact argv mapping)
+
+Let `$V` be the value of `ZOTWIKI_VAULT`. With first word `D` and remaining
+arguments `A…`, `zw D A…` invokes `zotwiki` as:
+
+| `zw …` | `zotwiki` argv |
+|---|---|
+| `zw sync NAME A…` | `sync --vault "$V" --collection NAME A…` |
+| `zw ask Q…` | `ask --vault "$V" "Q…"` (the remaining words joined by single spaces into one positional) |
+| `zw compile A…` | `compile --vault "$V" A…` |
+| `zw audit A…` | `audit --vault "$V" A…` |
+| `zw ingest A…` | `ingest A…` (no `--vault`) |
+
+- `sync` requires `NAME`; if absent, `zw` writes one usage line to stderr and
+  exits **2** without invoking `zotwiki`.
+- `ask` requires at least one word of question; if absent, `zw` writes one usage
+  line to stderr and exits **2** without invoking `zotwiki`.
+- `zotwiki` is reached only for the five directives above; `compile`, `sync`, and
+  `ask` are the LLM-invoking ones (§9.4) — `zw` does not change that.
+
+### 11.3 Usage / help
+
+`zw` with no arguments, or first word `help`, `-h`, or `--help`, writes the
+directive list to **stdout** and exits **0**, without invoking `zotwiki`.
+
+### 11.4 Unknown directive
+
+Any other first word: `zw` writes one `zw: unknown directive …` line to
+**stderr** and exits **2**, without invoking `zotwiki`.
+
+### 11.5 Exit-code passthrough
+
+For the five directives in §11.2, `zw` replaces its process with `zotwiki`
+(`exec`), so `zw`'s exit code is exactly `zotwiki`'s (0 / 1 / 2 per §9.3), and
+`zotwiki`'s stdout/stderr pass through unmodified.

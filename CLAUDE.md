@@ -28,8 +28,11 @@ zotwiki/
 │   ├── plan-sync.md        # completed plan (sync subcommand, REQ-040–044)
 │   ├── plan-v1.1.md        # completed plan (ClaudeCodeLLMClient, refactors)
 │   ├── plan-v1.2.md        # completed plan (REQ-045 + prompt refactors); BUG-1/2 tracked
+│   ├── plan-zw.md          # completed plan (zw terminal wrapper, REQ-049–052)
 │   ├── operator.md         # operator guide (drive zotwiki from another project)
 │   └── document-library.md # full repo file index by location
+├── scripts/
+│   └── zw                # operator terminal wrapper over the zotwiki CLI (contract §11)
 └── pyproject.toml        # setuptools build; [project.scripts] zotwiki = cli:run
 ```
 
@@ -131,7 +134,7 @@ ZotWikiError
 
 ## Current status
 
-All planned work through BUG-1 is complete. The implemented subcommands are `ingest`, `compile`, `audit`, `ask`, and `sync`. 48 requirements are green (REQ-001–REQ-048); the suite baseline is **387 passed, 1 failed** — the one failure (`test_req_019`) is a known, accepted macOS case-collision limitation, not a regression. BUG-1 (sync duplicate pages) is fixed (Ruling 6, `docs/plan-bug1.md`). Known-open item: BUG-2 (occasional LLM schema errors — mitigated, not fully fixed; see `docs/plan-v1.2.md`).
+All planned work through BUG-1 is complete. The implemented subcommands are `ingest`, `compile`, `audit`, `ask`, and `sync`. 52 requirements are green (REQ-001–REQ-052); the suite baseline is **387 passed, 1 failed** on macOS — the one failure (`test_req_019`) is a known, accepted macOS case-collision limitation, not a regression (on case-sensitive Linux it passes, so CI shows all green). BUG-1 (sync duplicate pages) is fixed (Ruling 6, `docs/plan-bug1.md`). The `zw` terminal wrapper (`scripts/zw`, contract §11, Ruling 7, REQ-049–052) lets the operator drive zotwiki from a plain terminal. Known-open item: BUG-2 (occasional LLM schema errors — mitigated, not fully fixed; see `docs/plan-v1.2.md` and the draft `docs/plan-bug2.md`).
 
 To start new work: write a ruling in `docs/rulings.md`, update `docs/contract.md` and `docs/requirements.md`, then follow the planner → tester → coder sequence.
 
