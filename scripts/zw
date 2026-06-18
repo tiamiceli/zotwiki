@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# zw — short terminal directives for operating zotwiki from a plain terminal.
+#
+# Setup:
+#   export ZOTWIKI_VAULT=/path/to/your/wiki       # your vault directory
+#   chmod +x scripts/zw && ln -s "$PWD/scripts/zw" ~/bin/zw   # put on PATH
+#
+# zw composes the public zotwiki CLI (contract §9). claude is reached only via
+# the sync/ask/compile directives — exactly as zotwiki already does (§9.4).
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+zw — zotwiki terminal directives (vault = $ZOTWIKI_VAULT)
+  zw sync COLLECTION [--update]                 sync a Zotero collection   (calls claude)
+  zw ask QUESTION...                            answer from the vault      (calls claude)
+  zw compile [--query Q | --key K ...] [...]    compile specific items     (calls claude)
+  zw ingest --title T [--creator N]... [...]    add a source to Zotero     (no claude)
+  zw audit                                      check vault integrity      (no claude)
+EOF
+}
+
+die() { echo "zw: $1" >&2; exit 2; }
+
+require_vault() {
+  [ -n "${ZOTWIKI_VAULT:-}" ] \
+    || die "ZOTWIKI_VAULT is not set (export it to your vault directory)"
+}
+
+cmd="${1:-}"
+if [ "$#" -gt 0 ]; then shift; fi
+
+case "$cmd" in
+  ""|help|-h|--help)
+    usage
+    ;;
+  sync)
+    require_vault
+    [ "$#" -gt 0 ] || die "usage: zw sync COLLECTION [--update]"
+    coll="$1"; shift
+    exec zotwiki sync --vault "$ZOTWIKI_VAULT" --collection "$coll" "$@"
+    ;;
+  ask)
+    require_vault
+    [ "$#" -gt 0 ] || die "usage: zw ask QUESTION..."
+    exec zotwiki ask --vault "$ZOTWIKI_VAULT" "$*"
+    ;;
+  compile)
+    require_vault
+    exec zotwiki compile --vault "$ZOTWIKI_VAULT" "$@"
+    ;;
+  audit)
+    require_vault
+    exec zotwiki audit --vault "$ZOTWIKI_VAULT" "$@"
+    ;;
+  ingest)
+    exec zotwiki ingest "$@"
+    ;;
+  *)
+    die "unknown directive '$cmd' (try: zw help)"
+    ;;
+esac

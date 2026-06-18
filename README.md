@@ -98,6 +98,38 @@ Claude Code will run `zotwiki ask` and synthesize an answer from your pages.
 
 ---
 
+## Operating from the terminal (`zw` directives)
+
+If you'd rather drive ZotWiki yourself from a plain terminal, `scripts/zw` gives
+short directives that fill in the long `--vault` path (and `--collection`) for you.
+This is also the most reliable way to run the LLM-backed commands: from a plain
+terminal there is no nested Claude Code session to corrupt the model's output
+(see `docs/user-testing/zotwiki-bug-findings.md`).
+
+Set your vault once and put `zw` on your `PATH`:
+
+```bash
+export ZOTWIKI_VAULT="/Users/yourname/.../MyVault/Research"   # add to ~/.zshrc
+chmod +x scripts/zw && ln -s "$PWD/scripts/zw" ~/bin/zw       # ~/bin on PATH
+```
+
+Then:
+
+| Directive | Runs | Calls Claude? |
+|---|---|---|
+| `zw sync "AI Papers" [--update]` | `zotwiki sync --vault "$ZOTWIKI_VAULT" --collection "AI Papers"` | yes |
+| `zw ask "what problem does attention solve?"` | `zotwiki ask --vault "$ZOTWIKI_VAULT" "…"` | yes |
+| `zw compile --query transformers [...]` | `zotwiki compile --vault "$ZOTWIKI_VAULT" [...]` | yes |
+| `zw ingest --title "BERT" --year 2019` | `zotwiki ingest [...]` | no |
+| `zw audit` | `zotwiki audit --vault "$ZOTWIKI_VAULT"` | no |
+| `zw` / `zw help` | prints this directive list | no |
+
+`zw` passes through `zotwiki`'s exit code (0 success / 1 domain failure / 2
+environment failure). It uses a single vault dir; if you keep a separate vault per
+collection, change the `sync` line to `--vault "$ZOTWIKI_VAULT/$coll"`.
+
+---
+
 ## Vault layout
 
 ```
