@@ -573,4 +573,46 @@ stderr, exit 1 immediately (unchanged).
 
 ---
 
-Total: 48 requirements (REQ-001 … REQ-048).
+## K. Operator terminal wrapper (`scripts/zw`)
+
+These REQs are about `scripts/zw` (contract §11), tested hermetically by running
+the script with a **fake `zotwiki`** executable on `PATH` (no real
+`claude`/Zotero/network). The fake echoes the argv it received and exits with a
+code the test controls.
+
+### REQ-049 — `zw` usage/help
+**Given** `scripts/zw` is run with no arguments, or with first argument `help`,
+`-h`, or `--help`,
+**When** it runs (with or without `ZOTWIKI_VAULT` set),
+**Then** it writes the directive list to **stdout**, exits **0**, and never
+invokes `zotwiki`.
+
+### REQ-050 — missing `ZOTWIKI_VAULT`
+**Given** `ZOTWIKI_VAULT` is unset or empty,
+**When** `zw` is run with a vault-needing directive (`sync`, `ask`, `compile`,
+`audit`),
+**Then** it writes exactly one line to **stderr**, exits **2**, and never invokes
+`zotwiki`.
+
+### REQ-051 — directive → `zotwiki` argv forwarding
+**Given** `ZOTWIKI_VAULT=$V` is set and a fake `zotwiki` on `PATH`,
+**When** each directive is run, **Then** the fake `zotwiki` receives exactly:
+- `zw sync NAME --update` → `sync --vault $V --collection NAME --update`
+- `zw ask why does X matter` → `ask --vault $V "why does X matter"` (one positional)
+- `zw compile --query transformers --limit 5` → `compile --vault $V --query transformers --limit 5`
+- `zw audit` → `audit --vault $V`
+- `zw ingest --title BERT --year 2019` → `ingest --title BERT --year 2019` (no `--vault`)
+**Error behavior:** `zw sync` with no collection, and `zw ask` with no question,
+each write one usage line to stderr, exit **2**, and do not invoke `zotwiki`.
+
+### REQ-052 — exit-code passthrough and unknown directive
+**Given** a fake `zotwiki` that exits with code `C`,
+**When** a forwarding directive is run, **Then** `zw` exits with the same code
+`C` (verified for `C ∈ {0, 1, 2}`).
+**And given** an unrecognized first argument,
+**When** `zw` is run, **Then** it writes one error line to **stderr**, exits
+**2**, and does not invoke `zotwiki`.
+
+---
+
+Total: 52 requirements (REQ-001 … REQ-052).

@@ -314,3 +314,49 @@ gains `zotero_keys`; new-page write and update-union rules; new
   statements; only their byte-oracles change to the §6.2 v2 format.
 - (f) Only `compiler.py`, `publisher.py`, `syncer.py`, `cli.py` change; no new
   runtime dependency (`dataclasses` is stdlib); the injection seam is untouched.
+
+## Ruling 7 — `zw` operator terminal wrapper authorized
+
+**Date:** 2026-06-18 · **Scope:** new contract §11, requirements REQ-049–052, `scripts/zw`, README, plan-zw.md · **Status:** binding.
+
+**1. Disposition: add `scripts/zw`, a thin shell wrapper giving short terminal
+directives for operating zotwiki from a plain terminal.** The operator drives
+zotwiki by hand and the full invocations are long and repetitive (every command
+repeats `--vault "<long path>"`; `sync` also repeats `--collection NAME`). `zw`
+injects the vault from `$ZOTWIKI_VAULT` and forwards the rest to the installed
+`zotwiki` console script.
+
+**2. Why a wrapper, not new zotwiki behavior.** `zw` only *composes* the existing
+public CLI (§9). It adds **no** new subcommand, flag, or behavior to
+`src/zotwiki/`, changes **no** existing §1–§10 contract surface, and adds **no**
+runtime dependency. zotwiki still reaches `claude` only via `sync`/`ask`/`compile`
+(`_NEEDS_LLM`); `zw` does not change which directives invoke the LLM.
+
+**3. Relationship to BUG-2.** Running from a plain terminal (not nested inside a
+Claude Code session) is exactly the environment in which the nested-session LLM
+corruption (`docs/user-testing/zotwiki-bug-findings.md`) does not occur — the
+child `claude` inherits no `CLAUDECODE`/`CLAUDE_CODE_*`. `zw` therefore needs **no**
+env-stripping and is independent of the still-draft structured-output fix. (That
+draft, `docs/plan-bug2.md`, reserved "Ruling 7"; since this ruling lands first it
+takes 7 and that pending ruling renumbers to **Ruling 8**.)
+
+**4. Contract change (binding):** new top-level **§11 Operator terminal wrapper
+(`scripts/zw`)** — the directive→`zotwiki` argv mapping, the `ZOTWIKI_VAULT`
+requirement, exit-code passthrough, usage/`help` output, and unknown-directive
+behavior. No edits to §1–§10.
+
+**5. Requirements added (binding):** REQ-049 (usage/help), REQ-050
+(`ZOTWIKI_VAULT` unset → exit 2), REQ-051 (directive→argv forwarding), REQ-052
+(exit-code passthrough + unknown directive).
+
+**6. Conditions (binding):**
+- (a) `$ZOTWIKI_VAULT` is the single vault directory for `sync`/`ask`/`compile`/
+  `audit`; `ingest` takes no `--vault`. (A per-collection layout is a documented
+  user tweak, not the shipped default.)
+- (b) `zw` execs `zotwiki` so the child's exit code is the wrapper's exit code
+  (0/1/2 passthrough, §9.3 preserved).
+- (c) Tests are hermetic via a fake `zotwiki` shim on `PATH` (the existing
+  fake-binary seam pattern); no real `claude`/Zotero/network. The real
+  `ClaudeCodeLLMClient` is not involved.
+- (d) TDD: tester writes REQ-049–052 against §11 and commits the red gate before
+  the coder writes `scripts/zw`.
