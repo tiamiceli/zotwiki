@@ -31,7 +31,7 @@ maker; `coder` = implementation author; `tester` = test suite author.
 | File | Owner | Purpose |
 |---|---|---|
 | `contract.md` | planner | The exhaustive wire/file/behavior specification. Defines data types (§2), the `ZoteroStore` protocol (§3), every Zotero HTTP endpoint the adapter calls (§4), the `LLMClient` protocol and compiled-article JSON schema (§5), the vault page format (§6), compiler semantics (§7), audit rules (§8), and CLI behavior (§9). Binding and exhaustive: silence = unspecified; speech = law. |
-| `requirements.md` | planner + tester | One observable REQ per behavior, expressed as Given/When/Then with explicit error cases. Currently 48 REQs (REQ-001–REQ-048). The tester reads only this file and `contract.md` before writing tests. |
+| `requirements.md` | planner + tester | One observable REQ per behavior, expressed as Given/When/Then with explicit error cases. Currently 52 REQs (REQ-001–REQ-052). The tester reads only this file and `contract.md` before writing tests. |
 | `rulings.md` | planner | Binding decisions that override or extend `contract.md`. Each ruling records the date, scope, rationale, exact contract/requirements changes, and conditions. Must be written before any contract change or new plan is authorized. |
 
 ### Plans (completed unless noted)
@@ -43,6 +43,8 @@ maker; `coder` = implementation author; `tester` = test suite author.
 | `plan-v1.1.md` | planner | Post-M6 plan authorized by Ruling 2: replaced `AnthropicLLMClient` with `ClaudeCodeLLMClient` (Phase A, TDD), plus infrastructure refactors (Phase B). Status: completed. |
 | `plan-v1.2.md` | planner | Plan authorized by Ruling 4: fulltext child-attachment fallback (REQ-045). Also covers the Phase B prompt-helper refactors (B1–B5) and the compact-embed rule (Ruling 5), plus BUG-1 and BUG-2 (LLM schema errors, mitigated). Status: Phase A + B complete; BUG-1 resolved (Ruling 6, see `plan-bug1.md`); BUG-2 mitigated. |
 | `plan-bug1.md` | planner | Plan authorized by Ruling 6: BUG-1 fix — `sync` de-dups by Zotero `key` recorded in a new `zotero_keys` frontmatter field (schema `zotwiki: 2`), with the `--update` title-pin (REQ-046–048). Status: complete. |
+| `plan-bug2.md` | planner | Draft plan for the structured-output LLM boundary (BUG-2). Pending its ruling (Ruling 8). Status: draft, not authorized. |
+| `plan-zw.md` | planner | Plan authorized by Ruling 7: the `scripts/zw` operator terminal wrapper — short directives composing the public CLI (REQ-049–052, contract §11). Status: complete. |
 
 ### Guides
 
@@ -50,6 +52,14 @@ maker; `coder` = implementation author; `tester` = test suite author.
 |---|---|---|
 | `operator.md` | human | End-user/operator guide for running zotwiki against a real Zotero library. Covers prerequisites (Zotero open, `claude` on PATH), all subcommand flags, stdout formats, exit codes, vault layout, citekey conventions, and a typical workflow. Intended to be copied into a research project's `CLAUDE.md`. |
 | `document-library.md` | planner | This file. Index of every file in the repo organized by location, with owner and purpose. |
+
+---
+
+## `scripts/`
+
+| File | Owner | Purpose |
+|---|---|---|
+| `zw` | coder | Operator terminal wrapper (contract §11, Ruling 7). POSIX-bash directives that inject `$ZOTWIKI_VAULT` and forward to the installed `zotwiki` CLI: `zw sync/ask/compile/ingest/audit`, plus `zw help`. Composes the public CLI only; execs `zotwiki` for exit-code passthrough. Not part of the Python package. |
 
 ---
 
@@ -122,3 +132,4 @@ read source files. The coder never writes here.
 | `test_req_045_fulltext_children.py` | tester | REQ-045 | Fulltext two-step probe: parent-has-fulltext regression; child-fallback probe and fetch; no-fulltext-anywhere; no-children; 404-from-children-endpoint as empty list. |
 | `test_sync_cli.py` | tester | REQ-041–044 | `zotwiki sync` CLI: compile/skip stdout lines, summary line, `--update` flag, collection-not-found exit 2, no-citekey silent skip. |
 | `test_sync_store.py` | tester | REQ-040 | `store.collection_items()`: maps items correctly, `CollectionNotFoundError` on unknown name. |
+| `test_zw_directives.py` | tester | REQ-049–052 | `scripts/zw` wrapper (contract §11) via a fake `zotwiki` shim on PATH: usage/help, `ZOTWIKI_VAULT`-unset error, directive→argv forwarding, exit-code passthrough, unknown directive. |

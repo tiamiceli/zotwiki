@@ -1,6 +1,6 @@
 # plan-zw — `zw` operator terminal wrapper
 
-**Status:** authorized (Ruling 7, 2026-06-18). Planner → tester → coder.
+**Status:** complete (Ruling 7, 2026-06-18). All phases landed; `tests/test_zw_directives.py` green (full suite 409 passed on Linux).
 
 ## Why
 
