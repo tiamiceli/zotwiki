@@ -360,3 +360,53 @@ behavior. No edits to §1–§10.
   `ClaudeCodeLLMClient` is not involved.
 - (d) TDD: tester writes REQ-049–052 against §11 and commits the red gate before
   the coder writes `scripts/zw`.
+
+## Ruling 8 — `zw`: collection-scoped vault subfolders
+
+**Date:** 2026-06-19 · **Scope:** contract §11.1/§11.2 (supersedes those parts of Ruling 7), requirements REQ-049–053, `scripts/zw`, README, plan-zw.md · **Status:** binding.
+
+**1. Disposition: `zw` operates on a per-collection wiki folder, configured by
+two environment variables.** `ZOTWIKI_VAULT` is the operator's Obsidian
+**Library** folder; `ZOTWIKI_COLLECTION` is the Zotero collection name and also
+the wiki subfolder name. The effective vault is `$ZOTWIKI_VAULT/$COLLECTION`.
+This replaces Ruling 7's single-`--vault`, collection-as-required-argument model
+(§11.1/§11.2), which forced the operator to repeat both the long path *and* the
+collection on every command.
+
+**2. Why this shape.** The operator keeps one Obsidian "Library" folder and wants
+each synced Zotero collection to live in its own subfolder under it. Setting the
+Library path and the collection name once (env vars) lets every directive target
+the right wiki with no per-command path. `sync NAME` still allows a one-off
+override for a different collection.
+
+**3. `zw sync` creates the folder.** `zotwiki sync` requires an existing
+`--vault` directory (§9.6, `cli.py` returns exit 2 otherwise). So `zw sync` runs
+`mkdir -p "$ZOTWIKI_VAULT/$COLLECTION"` before invoking sync — the new
+collection's folder appears under Library on first sync. `audit`/`ask`/`compile`
+do not create it (they read an existing wiki).
+
+**4. Still a pure composition of the public CLI.** No change to `src/zotwiki/`,
+no new zotwiki behavior, no dependency, no §1–§10 change. `claude` is still
+reached only via `sync`/`ask`/`compile` (§9.4).
+
+**5. Contract changes (binding):** §11.1 (two env vars; effective vault;
+resolution + error rules), §11.2 (per-collection argv mapping; `mkdir -p` on
+sync; optional `sync NAME` override). §11.3–§11.5 unchanged.
+
+**6. Requirements (binding):** REQ-049 (usage, unchanged), REQ-050
+(`ZOTWIKI_VAULT` unset → exit 2), **revised** REQ-051 (collection-scoped argv
+forwarding), REQ-052 (exit passthrough + unknown, unchanged), **new** REQ-053
+(`sync` creates `$ZOTWIKI_VAULT/$COLLECTION`; unresolved collection → exit 2).
+
+**7. Ruling-number note.** This is the next ruling authored, so it takes 8; the
+still-draft `docs/plan-bug2.md` ruling becomes **Ruling 9** when written.
+
+**8. Conditions (binding):**
+- (a) Collection resolution: positional `NAME` not starting with `-` (sync only)
+  else `$ZOTWIKI_COLLECTION`; if neither, exit 2 with one stderr line, no zotwiki.
+- (b) `zw exec`s `zotwiki` (exit-code passthrough preserved, §11.5).
+- (c) Tests hermetic via the fake-`zotwiki`-shim-on-PATH pattern; the real vault
+  root is a `tmp_path` directory so `mkdir -p` is observable. No real
+  `claude`/Zotero/network.
+- (d) TDD: tester revises REQ-049–052 and adds REQ-053 against §11, red gate
+  before the coder edits `scripts/zw`.

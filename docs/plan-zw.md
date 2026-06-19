@@ -42,3 +42,20 @@ clean; README documents `ZOTWIKI_VAULT` + install + directive table.
 - `tests/test_zw_directives.py` (tester)
 - `scripts/zw`, `README.md` (coder)
 - `CLAUDE.md`, `docs/document-library.md` (notes)
+
+---
+
+## Update — Ruling 8: collection-scoped vault subfolders
+
+The operator keeps one Obsidian **Library** folder and wants each Zotero
+collection in its own subfolder. Configuration becomes two env vars set once:
+
+- `ZOTWIKI_VAULT` = the Library folder (the one vault var).
+- `ZOTWIKI_COLLECTION` = the Zotero collection name (= wiki subfolder name).
+
+Effective vault = `$ZOTWIKI_VAULT/$ZOTWIKI_COLLECTION`. `zw sync` `mkdir -p`s that
+folder (zotwiki `sync` requires an existing `--vault`, §9.6) then syncs;
+`audit`/`ask`/`compile` target the same folder; `zw sync NAME` overrides the
+collection for one run. Contract §11.1/§11.2 revised; REQ-051 revised, REQ-053
+added (total 53). Same planner → tester → coder cycle; tests stay hermetic with
+the vault root in `tmp_path` so `mkdir -p` is observable.
