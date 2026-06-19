@@ -31,7 +31,7 @@ maker; `coder` = implementation author; `tester` = test suite author.
 | File | Owner | Purpose |
 |---|---|---|
 | `contract.md` | planner | The exhaustive wire/file/behavior specification. Defines data types (§2), the `ZoteroStore` protocol (§3), every Zotero HTTP endpoint the adapter calls (§4), the `LLMClient` protocol and compiled-article JSON schema (§5), the vault page format (§6), compiler semantics (§7), audit rules (§8), and CLI behavior (§9). Binding and exhaustive: silence = unspecified; speech = law. |
-| `requirements.md` | planner + tester | One observable REQ per behavior, expressed as Given/When/Then with explicit error cases. Currently 52 REQs (REQ-001–REQ-052). The tester reads only this file and `contract.md` before writing tests. |
+| `requirements.md` | planner + tester | One observable REQ per behavior, expressed as Given/When/Then with explicit error cases. Currently 53 REQs (REQ-001–REQ-053). The tester reads only this file and `contract.md` before writing tests. |
 | `rulings.md` | planner | Binding decisions that override or extend `contract.md`. Each ruling records the date, scope, rationale, exact contract/requirements changes, and conditions. Must be written before any contract change or new plan is authorized. |
 
 ### Plans (completed unless noted)
@@ -59,7 +59,7 @@ maker; `coder` = implementation author; `tester` = test suite author.
 
 | File | Owner | Purpose |
 |---|---|---|
-| `zw` | coder | Operator terminal wrapper (contract §11, Ruling 7). POSIX-bash directives that inject `$ZOTWIKI_VAULT` and forward to the installed `zotwiki` CLI: `zw sync/ask/compile/ingest/audit`, plus `zw help`. Composes the public CLI only; execs `zotwiki` for exit-code passthrough. Not part of the Python package. |
+| `zw` | coder | Operator terminal wrapper (contract §11, Rulings 7 & 8). POSIX-bash directives over the installed `zotwiki` CLI: `zw sync/ask/compile/ingest/audit`, plus `zw help`. Two env vars — `ZOTWIKI_VAULT` (Obsidian Library folder) and `ZOTWIKI_COLLECTION` (collection = subfolder) — give an effective vault `$ZOTWIKI_VAULT/$COLLECTION`; `zw sync` mkdir-p's it. Composes the public CLI only; execs `zotwiki` for exit-code passthrough. Not part of the Python package. |
 
 ---
 
@@ -132,4 +132,4 @@ read source files. The coder never writes here.
 | `test_req_045_fulltext_children.py` | tester | REQ-045 | Fulltext two-step probe: parent-has-fulltext regression; child-fallback probe and fetch; no-fulltext-anywhere; no-children; 404-from-children-endpoint as empty list. |
 | `test_sync_cli.py` | tester | REQ-041–044 | `zotwiki sync` CLI: compile/skip stdout lines, summary line, `--update` flag, collection-not-found exit 2, no-citekey silent skip. |
 | `test_sync_store.py` | tester | REQ-040 | `store.collection_items()`: maps items correctly, `CollectionNotFoundError` on unknown name. |
-| `test_zw_directives.py` | tester | REQ-049–052 | `scripts/zw` wrapper (contract §11) via a fake `zotwiki` shim on PATH: usage/help, `ZOTWIKI_VAULT`-unset error, directive→argv forwarding, exit-code passthrough, unknown directive. |
+| `test_zw_directives.py` | tester | REQ-049–053 | `scripts/zw` wrapper (contract §11) via a fake `zotwiki` shim on PATH: usage/help, `ZOTWIKI_VAULT`-unset error, collection-scoped argv forwarding, `sync` folder creation, unresolved-collection error, exit-code passthrough, unknown directive. |
