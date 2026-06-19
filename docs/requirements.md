@@ -583,7 +583,7 @@ code the test controls.
 ### REQ-049 — `zw` usage/help
 **Given** `scripts/zw` is run with no arguments, or with first argument `help`,
 `-h`, or `--help`,
-**When** it runs (with or without `ZOTWIKI_VAULT` set),
+**When** it runs (with or without `ZOTWIKI_VAULT`/`ZOTWIKI_COLLECTION` set),
 **Then** it writes the directive list to **stdout**, exits **0**, and never
 invokes `zotwiki`.
 
@@ -594,16 +594,20 @@ invokes `zotwiki`.
 **Then** it writes exactly one line to **stderr**, exits **2**, and never invokes
 `zotwiki`.
 
-### REQ-051 — directive → `zotwiki` argv forwarding
-**Given** `ZOTWIKI_VAULT=$V` is set and a fake `zotwiki` on `PATH`,
-**When** each directive is run, **Then** the fake `zotwiki` receives exactly:
-- `zw sync NAME --update` → `sync --vault $V --collection NAME --update`
-- `zw ask why does X matter` → `ask --vault $V "why does X matter"` (one positional)
-- `zw compile --query transformers --limit 5` → `compile --vault $V --query transformers --limit 5`
-- `zw audit` → `audit --vault $V`
-- `zw ingest --title BERT --year 2019` → `ingest --title BERT --year 2019` (no `--vault`)
-**Error behavior:** `zw sync` with no collection, and `zw ask` with no question,
-each write one usage line to stderr, exit **2**, and do not invoke `zotwiki`.
+### REQ-051 — directive → `zotwiki` argv forwarding (collection-scoped)
+**Given** `ZOTWIKI_VAULT=$V` and `ZOTWIKI_COLLECTION=$C` are set and a fake
+`zotwiki` on `PATH`,
+**When** each directive is run, **Then** the fake `zotwiki` receives exactly
+(effective vault `$V/$C`, per contract §11):
+- `zw sync --update` → `sync --vault $V/$C --collection $C --update`
+- `zw sync Other --update` → `sync --vault $V/Other --collection Other --update`
+  (positional `Other` overrides `$C` and is not forwarded)
+- `zw ask why does X matter` → `ask --vault $V/$C "why does X matter"` (one positional)
+- `zw compile --query transformers --limit 5` → `compile --vault $V/$C --query transformers --limit 5`
+- `zw audit` → `audit --vault $V/$C`
+- `zw ingest --title BERT --year 2019` → `ingest --title BERT --year 2019` (no `--vault`, no collection)
+**Error behavior:** `zw ask` with no question writes one usage line to stderr,
+exits **2**, and does not invoke `zotwiki`.
 
 ### REQ-052 — exit-code passthrough and unknown directive
 **Given** a fake `zotwiki` that exits with code `C`,
@@ -613,6 +617,18 @@ each write one usage line to stderr, exit **2**, and do not invoke `zotwiki`.
 **When** `zw` is run, **Then** it writes one error line to **stderr**, exits
 **2**, and does not invoke `zotwiki`.
 
+### REQ-053 — `zw sync` creates the collection folder; unresolved collection errors
+**Given** `ZOTWIKI_VAULT=$V` is set and the directory `$V/$C` does not yet exist,
+**When** `zw sync` runs (with `$C` from `ZOTWIKI_COLLECTION` or the positional
+override),
+**Then** `zw` creates `$V/$C` (recursively) before invoking `zotwiki sync`, so
+`zotwiki` receives an existing `--vault $V/$C`.
+**And given** `ZOTWIKI_VAULT` is set but no collection can be resolved (no
+positional and `ZOTWIKI_COLLECTION` unset/empty),
+**When** a collection-needing directive (`sync`, `ask`, `compile`, `audit`) runs,
+**Then** `zw` writes exactly one line to **stderr**, exits **2**, and never
+invokes `zotwiki` (and creates no directory).
+
 ---
 
-Total: 52 requirements (REQ-001 … REQ-052).
+Total: 53 requirements (REQ-001 … REQ-053).

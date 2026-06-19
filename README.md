@@ -67,14 +67,13 @@ The vault is just a directory of `.md` files. You can use:
 - An **existing Obsidian vault** (or a subfolder of one) — ZotWiki writes standard Markdown that Obsidian reads natively.
 - A **new empty directory** if you're starting fresh.
 
-If your vault lives inside an iCloud-synced Obsidian vault, use the full path:
+If your vault lives inside an iCloud-synced Obsidian vault, use the full path, e.g.:
 
-```bash
-# Example — adjust to your actual vault path
-VAULT="/Users/yourname/Library/Mobile Documents/iCloud~md~obsidian/Documents/MyVault/Research"
+```
+/Users/yourname/Library/Mobile Documents/iCloud~md~obsidian/Documents/MyVault/Research
 ```
 
-Paths with spaces or emoji must be quoted in the shell. When you ask Claude Code to sync, just describe the path in plain language and it will handle the quoting.
+Paths with spaces or emoji must be quoted in the shell. When you ask Claude Code to sync, just describe the path in plain language and it will handle the quoting. (If you drive ZotWiki from a plain terminal instead, see [Operating from the terminal](#operating-from-the-terminal-zw-directives) below — it uses a single `ZOTWIKI_VAULT` setting.)
 
 ### 3. Sync with Claude Code
 
@@ -101,32 +100,40 @@ Claude Code will run `zotwiki ask` and synthesize an answer from your pages.
 ## Operating from the terminal (`zw` directives)
 
 If you'd rather drive ZotWiki yourself from a plain terminal, `scripts/zw` gives
-short directives that fill in the long `--vault` path (and `--collection`) for you.
-This is also the most reliable way to run the LLM-backed commands: from a plain
-terminal there is no nested Claude Code session to corrupt the model's output
-(see `docs/user-testing/zotwiki-bug-findings.md`).
+short directives that fill in the long paths for you. This is also the most
+reliable way to run the LLM-backed commands: from a plain terminal there is no
+nested Claude Code session to corrupt the model's output (see
+`docs/user-testing/zotwiki-bug-findings.md`).
 
-Set your vault once and put `zw` on your `PATH`:
+Set **two** things once, then put `zw` on your `PATH`:
 
 ```bash
-export ZOTWIKI_VAULT="/Users/yourname/.../MyVault/Research"   # add to ~/.zshrc
-chmod +x scripts/zw && ln -s "$PWD/scripts/zw" ~/bin/zw       # ~/bin on PATH
+# add to ~/.zshrc
+export ZOTWIKI_VAULT="/Users/yourname/.../MyVault/Library"   # your Obsidian "Library" folder
+export ZOTWIKI_COLLECTION="AI Papers"                        # the Zotero collection to work with
+
+# put `zw` beside the installed zotwiki binary (already on your PATH):
+chmod +x scripts/zw
+ln -s "$PWD/scripts/zw" "$(dirname "$(command -v zotwiki)")/zw"
 ```
 
-Then:
+Each Zotero collection gets its **own wiki folder** under `ZOTWIKI_VAULT`:
+`$ZOTWIKI_VAULT/$ZOTWIKI_COLLECTION`. `zw sync` creates that folder the first time.
+So with the values above, `zw sync` builds `…/Library/AI Papers/`.
 
-| Directive | Runs | Calls Claude? |
+| Directive | Runs (`$V`=`ZOTWIKI_VAULT`, `$C`=`ZOTWIKI_COLLECTION`) | Calls Claude? |
 |---|---|---|
-| `zw sync "AI Papers" [--update]` | `zotwiki sync --vault "$ZOTWIKI_VAULT" --collection "AI Papers"` | yes |
-| `zw ask "what problem does attention solve?"` | `zotwiki ask --vault "$ZOTWIKI_VAULT" "…"` | yes |
-| `zw compile --query transformers [...]` | `zotwiki compile --vault "$ZOTWIKI_VAULT" [...]` | yes |
-| `zw ingest --title "BERT" --year 2019` | `zotwiki ingest [...]` | no |
-| `zw audit` | `zotwiki audit --vault "$ZOTWIKI_VAULT"` | no |
+| `zw sync [--update]` | `zotwiki sync --vault "$V/$C" --collection "$C"` (creates the folder) | yes |
+| `zw sync "Other Collection"` | same, but for `Other Collection` (one-off override) | yes |
+| `zw ask "what problem does attention solve?"` | `zotwiki ask --vault "$V/$C" "…"` | yes |
+| `zw compile --query transformers [...]` | `zotwiki compile --vault "$V/$C" [...]` | yes |
+| `zw ingest --title "BERT" --year 2019` | `zotwiki ingest [...]` (no vault/collection) | no |
+| `zw audit` | `zotwiki audit --vault "$V/$C"` | no |
 | `zw` / `zw help` | prints this directive list | no |
 
 `zw` passes through `zotwiki`'s exit code (0 success / 1 domain failure / 2
-environment failure). It uses a single vault dir; if you keep a separate vault per
-collection, change the `sync` line to `--vault "$ZOTWIKI_VAULT/$coll"`.
+environment failure). To work on a different collection, change `ZOTWIKI_COLLECTION`
+(or pass the name to `zw sync` for a single run).
 
 ---
 

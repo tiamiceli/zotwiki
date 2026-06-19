@@ -1107,27 +1107,45 @@ here. The installed `zotwiki` console script (`[project.scripts]`) must be on
 
 ### 11.1 Configuration
 
-- **`ZOTWIKI_VAULT`** (environment variable, required for every directive except
-  `ingest` and the usage path): the absolute vault directory. If a directive that
-  needs it runs with `ZOTWIKI_VAULT` unset or empty, `zw` writes exactly one line
-  to **stderr** and exits **2** (environment failure, matching §9.3), and does
-  **not** invoke `zotwiki`.
+Two environment variables (Ruling 8):
+
+- **`ZOTWIKI_VAULT`** — the absolute path to the Obsidian **Library** folder that
+  holds one wiki subfolder per Zotero collection. Required for every directive
+  except `ingest` and the usage path.
+- **`ZOTWIKI_COLLECTION`** — the Zotero collection name. It is also the name of
+  the wiki subfolder under `$ZOTWIKI_VAULT`. Required for `sync`/`ask`/`compile`/
+  `audit` unless a collection is supplied positionally (only `sync` accepts that).
+
+The **effective vault directory** for `sync`/`ask`/`compile`/`audit` is
+`$ZOTWIKI_VAULT/$COLLECTION`, where `$COLLECTION` is the positional collection
+(only `sync`) if given, else `$ZOTWIKI_COLLECTION`.
+
+If a directive needs `ZOTWIKI_VAULT` and it is unset/empty, or needs a collection
+and none can be resolved, `zw` writes exactly one line to **stderr** and exits
+**2** (environment failure, matching §9.3), and does **not** invoke `zotwiki`.
 
 ### 11.2 Directives (exact argv mapping)
 
-Let `$V` be the value of `ZOTWIKI_VAULT`. With first word `D` and remaining
-arguments `A…`, `zw D A…` invokes `zotwiki` as:
+Let `$V` be `ZOTWIKI_VAULT` and `$C` the resolved collection (§11.1). With first
+word `D` and remaining arguments `A…`, `zw D A…` invokes `zotwiki` as:
 
-| `zw …` | `zotwiki` argv |
-|---|---|
-| `zw sync NAME A…` | `sync --vault "$V" --collection NAME A…` |
-| `zw ask Q…` | `ask --vault "$V" "Q…"` (the remaining words joined by single spaces into one positional) |
-| `zw compile A…` | `compile --vault "$V" A…` |
-| `zw audit A…` | `audit --vault "$V" A…` |
-| `zw ingest A…` | `ingest A…` (no `--vault`) |
+| `zw …` | resolved collection | `zotwiki` argv |
+|---|---|---|
+| `zw sync A…` | `$ZOTWIKI_COLLECTION` | `sync --vault "$V/$C" --collection "$C" A…` |
+| `zw sync NAME A…` (NAME not starting with `-`) | `NAME` | `sync --vault "$V/$C" --collection "$C" A…` |
+| `zw ask Q…` | `$ZOTWIKI_COLLECTION` | `ask --vault "$V/$C" "Q…"` (remaining words joined by single spaces into one positional) |
+| `zw compile A…` | `$ZOTWIKI_COLLECTION` | `compile --vault "$V/$C" A…` |
+| `zw audit A…` | `$ZOTWIKI_COLLECTION` | `audit --vault "$V/$C" A…` |
+| `zw ingest A…` | — | `ingest A…` (no `--vault`, no collection) |
 
-- `sync` requires `NAME`; if absent, `zw` writes one usage line to stderr and
-  exits **2** without invoking `zotwiki`.
+- **`sync` creates the wiki folder.** Before invoking `zotwiki sync`, `zw` runs
+  `mkdir -p "$V/$C"` so the new collection's folder exists (zotwiki `sync`
+  requires an existing `--vault` dir, §9.6). The other directives do **not**
+  create the folder.
+- `sync`'s optional positional `NAME` (first remaining argument that does not
+  start with `-`) overrides `$ZOTWIKI_COLLECTION` for that run and is consumed
+  (not forwarded). A first argument starting with `-` (e.g. `--update`) is a flag,
+  not a collection.
 - `ask` requires at least one word of question; if absent, `zw` writes one usage
   line to stderr and exits **2** without invoking `zotwiki`.
 - `zotwiki` is reached only for the five directives above; `compile`, `sync`, and

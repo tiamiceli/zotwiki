@@ -1,22 +1,28 @@
 #!/usr/bin/env bash
 # zw — short terminal directives for operating zotwiki from a plain terminal.
 #
-# Setup:
-#   export ZOTWIKI_VAULT=/path/to/your/wiki       # your vault directory
-#   chmod +x scripts/zw && ln -s "$PWD/scripts/zw" ~/bin/zw   # put on PATH
+# Setup (add to ~/.zshrc):
+#   export ZOTWIKI_VAULT=/path/to/your/Obsidian/Library  # holds one wiki per collection
+#   export ZOTWIKI_COLLECTION="AI Papers"                # Zotero collection to sync
+#   chmod +x scripts/zw
+#   ln -s "$PWD/scripts/zw" "$(dirname "$(command -v zotwiki)")/zw"
 #
-# zw composes the public zotwiki CLI (contract §9). claude is reached only via
-# the sync/ask/compile directives — exactly as zotwiki already does (§9.4).
+# Each Zotero collection becomes its own wiki folder: $ZOTWIKI_VAULT/$COLLECTION.
+# `zw sync` creates that folder if needed. claude is reached only via
+# sync/ask/compile (contract §9.4); zw composes the public CLI (§9, §11).
 set -euo pipefail
 
 usage() {
   cat <<'EOF'
-zw — zotwiki terminal directives (vault = $ZOTWIKI_VAULT)
-  zw sync COLLECTION [--update]                 sync a Zotero collection   (calls claude)
-  zw ask QUESTION...                            answer from the vault      (calls claude)
+zw — zotwiki terminal directives
+  vault root : $ZOTWIKI_VAULT        (your Obsidian "Library" folder)
+  collection : $ZOTWIKI_COLLECTION   (Zotero collection = wiki subfolder)
+
+  zw sync [COLLECTION] [--update]               sync a Zotero collection   (calls claude)
+  zw ask QUESTION...                            answer from the wiki       (calls claude)
   zw compile [--query Q | --key K ...] [...]    compile specific items     (calls claude)
   zw ingest --title T [--creator N]... [...]    add a source to Zotero     (no claude)
-  zw audit                                      check vault integrity      (no claude)
+  zw audit                                      check wiki integrity       (no claude)
 EOF
 }
 
@@ -24,7 +30,14 @@ die() { echo "zw: $1" >&2; exit 2; }
 
 require_vault() {
   [ -n "${ZOTWIKI_VAULT:-}" ] \
-    || die "ZOTWIKI_VAULT is not set (export it to your vault directory)"
+    || die "ZOTWIKI_VAULT is not set (export it to your Obsidian Library folder)"
+}
+
+# Resolve the collection from $ZOTWIKI_COLLECTION (env), or die.
+env_collection() {
+  [ -n "${ZOTWIKI_COLLECTION:-}" ] \
+    || die "no collection: pass one (zw sync NAME) or set ZOTWIKI_COLLECTION"
+  printf '%s' "$ZOTWIKI_COLLECTION"
 }
 
 cmd="${1:-}"
@@ -36,22 +49,31 @@ case "$cmd" in
     ;;
   sync)
     require_vault
-    [ "$#" -gt 0 ] || die "usage: zw sync COLLECTION [--update]"
-    coll="$1"; shift
-    exec zotwiki sync --vault "$ZOTWIKI_VAULT" --collection "$coll" "$@"
+    # Optional positional collection: first arg not starting with '-'.
+    if [ "$#" -gt 0 ] && [ "${1#-}" = "$1" ]; then
+      coll="$1"; shift
+    else
+      coll="$(env_collection)"
+    fi
+    dir="$ZOTWIKI_VAULT/$coll"
+    mkdir -p "$dir"
+    exec zotwiki sync --vault "$dir" --collection "$coll" "$@"
     ;;
   ask)
     require_vault
+    coll="$(env_collection)"
     [ "$#" -gt 0 ] || die "usage: zw ask QUESTION..."
-    exec zotwiki ask --vault "$ZOTWIKI_VAULT" "$*"
+    exec zotwiki ask --vault "$ZOTWIKI_VAULT/$coll" "$*"
     ;;
   compile)
     require_vault
-    exec zotwiki compile --vault "$ZOTWIKI_VAULT" "$@"
+    coll="$(env_collection)"
+    exec zotwiki compile --vault "$ZOTWIKI_VAULT/$coll" "$@"
     ;;
   audit)
     require_vault
-    exec zotwiki audit --vault "$ZOTWIKI_VAULT" "$@"
+    coll="$(env_collection)"
+    exec zotwiki audit --vault "$ZOTWIKI_VAULT/$coll" "$@"
     ;;
   ingest)
     exec zotwiki ingest "$@"
