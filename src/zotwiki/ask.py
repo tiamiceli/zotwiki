@@ -20,7 +20,31 @@ from zotwiki.publisher import (
     _parse_frontmatter,
 )
 
-__all__ = ["Answer", "SourceRef", "ask"]
+__all__ = ["Answer", "SourceRef", "ANSWER_SCHEMA", "ask"]
+
+
+# Loose JSON-Schema shape hint for the answer JSON (contract SS5.6). A decoding
+# aid only; the SS9.5 validator in `ask` remains the authoritative gate (Ruling
+# 9). Echoes the top-level keys and the answer/sources shape.
+ANSWER_SCHEMA: dict = {
+    "type": "object",
+    "additionalProperties": True,
+    "required": ["answer", "sources"],
+    "properties": {
+        "answer": {"type": "string"},
+        "sources": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["page", "citekeys"],
+                "properties": {
+                    "page": {"type": "string"},
+                    "citekeys": {"type": "array", "items": {"type": "string"}},
+                },
+            },
+        },
+    },
+}
 
 
 def _strip_fence(text: str) -> str:

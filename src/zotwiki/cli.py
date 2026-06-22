@@ -17,11 +17,11 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
-from zotwiki.ask import ask
+from zotwiki.ask import ANSWER_SCHEMA, ask
 from zotwiki.auditor import Auditor
 from zotwiki.compiler import Compiler
 from zotwiki.errors import CollectionNotFoundError, VaultError, ZotWikiError, ZoteroUnavailableError
-from zotwiki.llm import ClaudeCodeLLMClient, LLMClient
+from zotwiki.llm import ARTICLE_SCHEMA, ClaudeCodeLLMClient, LLMClient
 from zotwiki.publisher import VaultPublisher, parse_page
 from zotwiki.syncer import Syncer
 from zotwiki.zotero import DEFAULT_BASE_URL, HTTPZoteroStore, ZoteroStore
@@ -218,7 +218,9 @@ def main(
     if llm is None and args.command in _NEEDS_LLM:
         if not shutil.which("claude"):
             return _fail(EXIT_ENV, "claude not found")
-        llm = ClaudeCodeLLMClient()
+        # SS9.4: construct with the schema for what the command produces.
+        schema = ANSWER_SCHEMA if args.command == "ask" else ARTICLE_SCHEMA
+        llm = ClaudeCodeLLMClient(output_schema=schema)
 
     if store is None:
         store = HTTPZoteroStore(args.zotero_url)

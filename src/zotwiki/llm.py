@@ -7,7 +7,11 @@ SS5.5 — stdlib only.
 from __future__ import annotations
 
 import json
+import os
 import re
+import subprocess
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 from zotwiki.errors import ArticleSchemaError, ZotWikiError
@@ -16,6 +20,7 @@ from zotwiki.models import Article, Claim, Contradiction, Quote, Section
 __all__ = [
     "LLMClient",
     "ClaudeCodeLLMClient",
+    "ARTICLE_SCHEMA",
     "parse_article_json",
     "article_to_json_dict",
 ]
@@ -28,29 +33,192 @@ class LLMClient(Protocol):
     def complete(self, prompt: str) -> str: ...
 
 
-class ClaudeCodeLLMClient:
-    """Production `LLMClient`: shells out to the `claude` CLI via subprocess.
+# Loose JSON-Schema shape hint for the compiled-article JSON (contract SS5.6).
+# A decoding aid only -- `parse_article_json` remains the sole authoritative
+# validator/canonicalizer (Ruling 9; REQ-010/011 unchanged), so this echoes the
+# top-level required keys and the claim/quote/section/link shape, not the full
+# validator's rules.
+ARTICLE_SCHEMA: dict = {
+    "type": "object",
+    "additionalProperties": True,
+    "required": ["title", "summary", "sections", "claims", "links"],
+    "properties": {
+        "title": {"type": "string"},
+        "summary": {"type": "string"},
+        "sections": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["heading", "body"],
+                "properties": {
+                    "heading": {"type": "string"},
+                    "body": {"type": "string"},
+                },
+            },
+        },
+        "claims": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["text", "citekeys", "quotes"],
+                "properties": {
+                    "text": {"type": "string"},
+                    "citekeys": {"type": "array", "items": {"type": "string"}},
+                    "quotes": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "required": ["citekey", "text"],
+                            "properties": {
+                                "citekey": {"type": "string"},
+                                "text": {"type": "string"},
+                            },
+                        },
+                    },
+                },
+            },
+        },
+        "links": {"type": "array", "items": {"type": "string"}},
+    },
+}
 
-    Never imported by the hermetic test suite (contract SS5.1).
+# Diagnostic fields recorded in a failure artifact when present (contract SS5.6).
+_DIAGNOSTIC_FIELDS = (
+    "subtype", "errors", "stop_reason",
+    "session_id", "usage", "num_turns", "total_cost_usd",
+)
+
+
+class ClaudeCodeLLMClient:
+    """Production `LLMClient`: shells out to the `claude` CLI via subprocess,
+    constraining the model to schema-shaped JSON via structured output
+    (contract SS5.6, Ruling 9).
+
+    Never imported by the injected-fake suite (contract SS5.1); its only direct
+    test drives a fake `claude` binary on PATH.
     """
 
+    def __init__(
+        self,
+        output_schema: dict | None = None,
+        *,
+        dump_dir: Path | None = None,
+    ) -> None:
+        self._output_schema = output_schema
+        self._dump_dir = Path(dump_dir) if dump_dir is not None else None
+
     def complete(self, prompt: str) -> str:
-        import subprocess
+        argv = [
+            "claude", "--print",
+            "--output-format", "json",
+            "--exclude-dynamic-system-prompt-sections",
+        ]
+        if self._output_schema is not None:
+            argv += ["--json-schema", json.dumps(self._output_schema)]
+
+        # Defense in depth (SS5.6): a nested invocation must not inherit the
+        # session's conversational context. Strip CLAUDECODE and every
+        # CLAUDE_CODE_* key; preserve everything else (PATH, HOME, OAuth, ...).
+        env = {
+            key: value
+            for key, value in os.environ.items()
+            if key != "CLAUDECODE" and not key.startswith("CLAUDE_CODE_")
+        }
+
         try:
             result = subprocess.run(
-                ["claude", "--print"],
+                argv,
                 input=prompt.encode("utf-8"),
                 capture_output=True,
+                env=env,
             )
         except FileNotFoundError:
+            # No subprocess ran, no artifact (SS5.6).
             raise ZotWikiError("claude not found") from None
+
+        stdout = result.stdout.decode("utf-8", errors="replace")
+        stderr = result.stderr.decode("utf-8", errors="replace")
+
+        envelope: dict | None = None
+        try:
+            parsed = json.loads(stdout)
+        except ValueError:
+            parsed = None
+        if isinstance(parsed, dict):
+            envelope = parsed
+
+        # Success: exit 0, a JSON object, subtype "success", field present.
         if result.returncode != 0:
-            stderr = result.stderr.decode("utf-8", errors="replace").strip()
-            msg = f"claude exited {result.returncode}"
-            if stderr:
-                msg += f": {stderr[:200]}"
-            raise ZotWikiError(msg) from None
-        return result.stdout.decode("utf-8")
+            reason = f"claude exited {result.returncode}"
+        elif envelope is None:
+            reason = "claude output was not a JSON object"
+        elif envelope.get("subtype") != "success":
+            reason = f"subtype {envelope.get('subtype')!r}"
+        else:
+            field = "structured_output" if self._output_schema is not None else "result"
+            if field not in envelope:
+                reason = f"missing {field!r} field"
+            elif self._output_schema is not None:
+                return json.dumps(envelope[field])
+            else:
+                return envelope[field]
+
+        # Failure: fail closed, dump verbatim, raise a single-line message.
+        artifact = self._write_failure_artifact(
+            argv, prompt, stdout, stderr, result.returncode, envelope
+        )
+        subtype = envelope.get("subtype") if envelope is not None else None
+        if isinstance(subtype, str) and "subtype" not in reason:
+            reason = f"subtype {subtype!r}, {reason}"
+        raise ZotWikiError(
+            f"structured-output LLM failure ({reason}); failure artifact: {artifact}"
+        )
+
+    def _write_failure_artifact(
+        self,
+        argv: list[str],
+        prompt: str,
+        stdout: str,
+        stderr: str,
+        returncode: int,
+        envelope: dict | None,
+    ) -> Path:
+        dump_dir = self._dump_dir or (Path.home() / ".zotwiki" / "failures")
+        dump_dir.mkdir(parents=True, exist_ok=True)
+
+        base = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S_%f")
+        path = dump_dir / f"{base}.txt"
+        suffix = 1
+        while path.exists():
+            path = dump_dir / f"{base}_{suffix}.txt"
+            suffix += 1
+
+        sections = [
+            "=== argv ===",
+            json.dumps(argv),
+            "",
+            "=== prompt (stdin) ===",
+            prompt,
+            "",
+            "=== exit code ===",
+            str(returncode),
+            "",
+            "=== stdout (verbatim envelope) ===",
+            stdout,
+            "",
+            "=== stderr ===",
+            stderr,
+            "",
+            "=== diagnostics ===",
+        ]
+        if envelope is not None:
+            for name in _DIAGNOSTIC_FIELDS:
+                if name in envelope:
+                    value = envelope[name]
+                    rendered = value if isinstance(value, str) else json.dumps(value)
+                    sections.append(f"{name}: {rendered}")
+        path.write_text("\n".join(sections) + "\n", encoding="utf-8")
+        return path
 
 
 _REQUIRED_KEYS = ("title", "summary", "sections", "claims", "links")
