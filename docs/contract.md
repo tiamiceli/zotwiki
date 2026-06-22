@@ -425,11 +425,18 @@ class LLMClient(Protocol):
 One method, one string in, one string out. Tests implement this with canned
 returns and optional prompt recording.
 
-Production: `zotwiki.llm.ClaudeCodeLLMClient()` — shells out to the `claude`
-CLI (Claude Code) via `subprocess` (stdlib). DECISION: no API key or model
-configuration is required; the CLI uses the user's existing Claude Code
-installation and session (§9.4). This class is **never** imported by any test
-and is out of audit scope for the hermetic suite.
+Production: `zotwiki.llm.ClaudeCodeLLMClient(output_schema=None, *,
+dump_dir=None)` — shells out to the `claude` CLI (Claude Code) via `subprocess`
+(stdlib), constraining the model to schema-shaped JSON via structured output
+(§5.6, Ruling 9). DECISION: no API key or model configuration is required; the CLI
+uses the user's existing Claude Code installation and OAuth session (§9.4).
+`output_schema` is supplied at construction by the command handler that knows
+what it produces (`compile`/`sync` → `ARTICLE_SCHEMA`; `ask` → `ANSWER_SCHEMA`;
+§9.4). This class is **never** imported by the **injected-fake** suite
+(Compiler/CLI/`ask` tests, which inject a string-returning fake through the seam);
+its only direct test is the dedicated client module
+`tests/test_m6_llm_client.py`, which imports it lazily and drives a **fake
+`claude` binary on PATH** — never the real binary, never the network (Ruling 9).
 
 ### 5.2 Compiled-article JSON schema (exact)
 
@@ -521,6 +528,67 @@ exactly the five required keys, suitable for `json.dumps`. Used to embed the
 existing article in update prompts as the **compact** form (no `indent`; see
 §7.1). Round-trip law:
 `parse_article_json(json.dumps(article_to_json_dict(a)))[0] == a`.
+
+### 5.6 Structured-output invocation (`ClaudeCodeLLMClient`, Ruling 9)
+
+`complete(self, prompt: str) -> str` is the unchanged protocol method; only the
+production client's internals change. Behavior:
+
+```python
+class ClaudeCodeLLMClient:
+    def __init__(self, output_schema: dict | None = None, *,
+                 dump_dir: Path | None = None) -> None
+    def complete(self, prompt: str) -> str
+```
+
+**Invocation.** `complete` runs one `claude` subprocess, the prompt delivered on
+stdin (UTF-8):
+
+- argv: `["claude", "--print", "--output-format", "json",
+  "--exclude-dynamic-system-prompt-sections"]`, plus `["--json-schema",
+  json.dumps(output_schema)]` **iff** `output_schema is not None`.
+- env: a copy of the process environment with `CLAUDECODE` and **every** key
+  beginning `CLAUDE_CODE_` removed (defense in depth against nested-session
+  context). All other variables — `PATH`, `HOME`, OAuth keychain access,
+  `ANTHROPIC_*` — are preserved. A nested invocation must therefore not inherit
+  `CLAUDECODE`/`CLAUDE_CODE_*`.
+- `claude` absent from PATH (`FileNotFoundError`) → `ZotWikiError("claude not
+  found")` (no subprocess ran, no artifact).
+
+**Success.** When `claude` exits 0 **and** stdout parses as a JSON object with
+`subtype == "success"`:
+
+- `output_schema is not None` → return `json.dumps(envelope["structured_output"])`.
+- `output_schema is None` → return `envelope["result"]` (a string).
+
+`complete` still returns a **string**, which the caller gates with the unchanged
+`parse_article_json` (compile/sync) or `ask` validator (§9.5). The
+`--json-schema` shape is only a decoding hint; **`parse_article_json` remains the
+sole authoritative validator/canonicalizer** (Ruling 9; REQ-010/011 unchanged).
+
+**Failure (fail-closed, dump-verbatim).** On **any** of: non-zero `claude` exit;
+stdout that is not a JSON object; `subtype != "success"`; or the expected
+extraction field absent (`structured_output` when a schema was set, `result`
+otherwise) — `complete` writes a failure artifact and raises `ZotWikiError`,
+with **no** retry and **no** fallback:
+
+- Artifact: a UTF-8 text file `{dump_dir}/{ts}.txt` (`dump_dir` default
+  `~/.zotwiki/failures/`, created if missing; `{ts}` a filesystem-safe
+  timestamp). It contains the exact argv, the prompt sent on stdin, the verbatim
+  stdout envelope, stderr, the exit code, and — when stdout parsed as a JSON
+  object — the diagnostic fields present in it (`subtype`, `errors`,
+  `stop_reason`, `session_id`, `usage`, `num_turns`, `total_cost_usd`). The exact
+  layout is unspecified; the fields above, when present, must appear.
+- Raised message: **single-line** (no newline), naming the failure (the `subtype`
+  when known) and **including the artifact path**, so the §9.3 `error:` line
+  stays one line. `result` is present only on `success`, so a failure record
+  carries the structured diagnostic fields, not raw model prose.
+
+**Schemas.** `ARTICLE_SCHEMA` (a constant in `llm.py`, beside `parse_article_json`)
+and `ANSWER_SCHEMA` (in `ask.py`) are **loose JSON-Schema shape hints** — the
+top-level required keys and the claim/quote/section/link (resp. answer/sources)
+shape — not re-encodings of the full validator. Their exact JSON-Schema content
+is unspecified (Ruling 5 spirit: a decoding aid, not the gate).
 
 ---
 
@@ -970,17 +1038,25 @@ of its citekeys: `"- [[{page}]] [@{citekey}]\n"`. Exit 0.
 | code | meaning | triggers |
 |---|---|---|
 | 0 | success | — |
-| 1 | domain failure | `ArticleSchemaError`, `ItemNotFoundError`, `CitekeyNotFoundError`, `FulltextNotFoundError`, `PageParseError`, audit violations, zero compile items, `--page` title mismatch |
+| 1 | domain failure | `ArticleSchemaError`, `ItemNotFoundError`, `CitekeyNotFoundError`, `FulltextNotFoundError`, `PageParseError`, a structured-output LLM failure (the `ZotWikiError` from §5.6), audit violations, zero compile items, `--page` title mismatch |
 | 2 | environment failure | `ZoteroUnavailableError`, `VaultError`, `CollectionNotFoundError`, missing LLM configuration, argparse usage errors |
 
 Every nonzero exit except audit-violations prints exactly one line
-`"error: {message}\n"` to **stderr** and nothing extra to stdout.
+`"error: {message}\n"` to **stderr** and nothing extra to stdout. For a
+structured-output LLM failure (§5.6), `{message}` is the single-line
+`ClaudeCodeLLMClient` message that **points to the failure artifact file**; the
+verbatim envelope/prompt live in that file, never on the `error:` line.
 
 ### 9.4 LLM construction (only when `llm is None` and the command needs one)
 
 `compile`, `sync`, and `ask` need an LLM. If not injected: verify that `claude` is
 available on PATH; if not found → `error: claude not found` on stderr, exit 2,
-no subprocess spawned. `ingest` and `audit` never construct an LLM.
+no subprocess spawned. Otherwise construct `ClaudeCodeLLMClient` with the schema
+for what the command produces (Ruling 9, §5.6): `compile`/`sync` →
+`output_schema=ARTICLE_SCHEMA` (from `llm.py`); `ask` →
+`output_schema=ANSWER_SCHEMA` (from `ask.py`). `ingest` and `audit` never
+construct an LLM. (Which schema is passed is not hermetically tested — the
+injected-fake suite never constructs the real client.)
 
 ### 9.6 `sync` subcommand
 
@@ -1077,6 +1153,11 @@ def ask(vault_dir: Path, question: str, llm: LLMClient) -> Answer
    page title and every citekey a member of that page's frontmatter
    `citekeys`. Any schema or vault-validation failure →
    `ArticleSchemaError` (exit 1 at the CLI).
+
+The production client for `ask` is constructed with `output_schema=ANSWER_SCHEMA`
+(§5.6, §9.4); the answer-shape constant `ANSWER_SCHEMA` lives in `ask.py`. The
+string returned by `complete` is gated by the validator in steps 3–4 above, which
+is **unchanged** by Ruling 9.
 
 ---
 

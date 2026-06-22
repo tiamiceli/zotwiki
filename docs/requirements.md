@@ -420,16 +420,21 @@ attempted to any host other than what the injected fakes do.
 **Error behavior:** `main(["compile", ...])` without an injected `llm` and
 with `claude` not on PATH → return 2 with `error: claude not found` on stderr.
 
-### REQ-039 — `ClaudeCodeLLMClient` calls `claude -p` and handles failures
+### REQ-039 — `ClaudeCodeLLMClient` calls `claude -p` with structured output and extracts the result
 **Given** a fake `claude` binary on PATH that reads a prompt from stdin and
-prints a valid article JSON to stdout with exit code 0,
-**When** `ClaudeCodeLLMClient().complete(prompt)` is called,
-**Then** the fake binary is invoked, the full prompt is passed via stdin, and
-the returned string equals exactly what the fake printed to stdout.
-**Error behavior:** if `claude` exits with a non-zero return code →
-`ZotWikiError` is raised with a single-line message including the exit code
-and any stderr output; if `claude` is not found on PATH → `ZotWikiError` is
-raised with the message `"claude not found"`.
+prints a **success envelope** to stdout (a JSON object with
+`"subtype": "success"`, a `"structured_output"` object, and a `"result"` string)
+with exit code 0 (contract §5.6),
+**When** `ClaudeCodeLLMClient(output_schema=SCHEMA).complete(prompt)` is called,
+**Then** the fake binary is invoked with `--print --output-format json
+--json-schema <json.dumps(SCHEMA)> --exclude-dynamic-system-prompt-sections`, the
+full prompt is passed via stdin, and the returned string equals
+`json.dumps(envelope["structured_output"])` (so the unchanged `parse_article_json`
+gates it). **And** with `output_schema=None`, `--json-schema` is **absent** from
+the argv and the returned string equals the envelope's `"result"`.
+**Error behavior:** if `claude` is not found on PATH → `ZotWikiError` is raised
+with the message `"claude not found"` (no subprocess, no artifact). Non-success
+envelopes, non-zero exit, and malformed output are covered by REQ-055.
 
 ---
 
@@ -631,4 +636,44 @@ invokes `zotwiki` (and creates no directory).
 
 ---
 
-Total: 53 requirements (REQ-001 … REQ-053).
+## L. Structured-output LLM boundary (BUG-2, Ruling 9)
+
+These REQs are about `ClaudeCodeLLMClient` (contract §5.6), tested hermetically by
+the **dedicated client module** (`tests/test_m6_llm_client.py`) — the client is
+imported lazily and driven through a **fake `claude` binary on PATH** that emits a
+JSON envelope; the real `claude` and the network are never touched. The
+injected-fake suite (Compiler/CLI/`ask`) is unchanged and still never constructs
+the real client.
+
+### REQ-054 — subprocess environment is sanitized of nested-session vars
+**Given** a fake `claude` on PATH that records which of `CLAUDECODE` and
+`CLAUDE_CODE_*` it received in its environment (e.g. encoding them into its
+success-envelope output), and the parent process has `CLAUDECODE=1` and at least
+one `CLAUDE_CODE_*` variable set,
+**When** `ClaudeCodeLLMClient(output_schema=SCHEMA).complete(prompt)` is called,
+**Then** the fake reports that **no** `CLAUDECODE` and **no** `CLAUDE_CODE_*` key
+was present in its environment, while an unrelated parent variable (e.g. a custom
+`ZOTWIKI_TEST_MARKER`) **is** preserved.
+**Error behavior:** none.
+
+### REQ-055 — fail-closed with a verbatim failure artifact
+**Given** a `dump_dir` set to a `tmp_path` and a fake `claude` on PATH that prints
+a **non-success envelope** (a JSON object with
+`"subtype": "error_max_structured_output_retries"`, an `"errors"` array,
+`"stop_reason"`, and metadata, and **no** `"result"`/`"structured_output"`) with
+exit code 0,
+**When** `ClaudeCodeLLMClient(output_schema=SCHEMA, dump_dir=DIR).complete(prompt)`
+is called,
+**Then** `ZotWikiError` is raised with a **single-line** message (no newline) that
+names the failure (`subtype`) and includes the path to a **failure artifact** that
+now exists under `DIR`; the artifact contains the invocation argv, the prompt, the
+verbatim stdout envelope, and the diagnostic fields present in the envelope
+(`subtype`, `errors`, `stop_reason`, and metadata).
+**And** the same fail-closed-with-artifact behavior holds when the fake instead
+(a) exits **non-zero**, or (b) prints stdout that is **not a JSON object** /
+**omits the expected extraction field** (`structured_output` when a schema is set).
+**Error behavior:** this REQ is the error behavior. No retry, no fallback path.
+
+---
+
+Total: 55 requirements (REQ-001 … REQ-055).

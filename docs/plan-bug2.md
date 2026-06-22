@@ -1,10 +1,33 @@
 # plan-bug2 — Structured-output LLM boundary (BUG-2)
 
-**Status:** DRAFT — pending **Ruling 7** and operator validation of two
-assumptions (§7). Not yet authorized for the tester/coder. This file captures
-the design agreed with the project owner, the Claude Code CLI documentation
-findings (fetched 2026-06-17), and the format-checker recommendation requested
-for the tester.
+**Status:** AUTHORIZED by **Ruling 9** (2026-06-22). The blocking precondition
+(§7.1 — does structured output work under the Claude Code OAuth login?) was
+**resolved 2026-06-22**: validated against real `claude` v2.1.185 inside a Claude
+Code session with **no `ANTHROPIC_API_KEY`** —
+`claude --print --output-format json --json-schema <schema>
+--exclude-dynamic-system-prompt-sections` (with `CLAUDECODE`/`CLAUDE_CODE_*`
+stripped from the child env) returned `subtype: "success"` and a populated
+`structured_output`. The TDD sequence is now: tester revises REQ-039 and adds
+**REQ-054**/**REQ-055** against contract §5.6 (red gate), then the coder edits
+`llm.py`/`ask.py`/`cli.py`. This file is the **planner's worksheet**; the binding
+spec for the blind tester (contract.md + requirements.md) and coder (contract.md)
+is Ruling 9 + contract §5.1/§5.6/§9.3/§9.4/§9.5 + REQ-039/054/055.
+
+> **Numbering note.** This plan's draft referred to its authorizing ruling as
+> "Ruling 7"; Rulings 7 and 8 were taken by the `zw` wrapper work, so the BUG-2
+> ruling is **Ruling 9** (as Ruling 8 foretold). References to "Ruling 7" below
+> mean Ruling 9.
+
+> **Test-import invariant (resolved, Ruling 9 §7).** CLAUDE.md's
+> "`ClaudeCodeLLMClient` is never imported by any test" means the *injected-fake*
+> suite; the dedicated module `tests/test_m6_llm_client.py` already imports the
+> client lazily and drives a **fake `claude` binary on PATH**. The REQ-039/054/055
+> tests extend that module and seam — no real binary, no network. The CLAUDE.md
+> bullet has been corrected to say this.
+
+This file captures the design agreed with the project owner, the Claude Code CLI
+documentation findings (fetched 2026-06-17), and the format-checker recommendation
+requested for the tester.
 
 **Relationship to prior work:** BUG-2 was opened in `plan-v1.2.md` ("LLM
 sometimes produces invalid claim schema") and classified **mitigated (not fully
@@ -243,11 +266,16 @@ CLAUDE.md," so the check must confirm that env-stripping +
 CLAUDE.md* and the session's dynamic prompt. A clean-terminal run won't
 reproduce the failure and proves nothing.
 
-1. **Does `--json-schema` / structured output work under the Claude Code
-   *subscription* (OAuth) login, with no `ANTHROPIC_API_KEY`?** This is a
-   **precondition gate**: if it silently requires API access, the plan is
-   **blocked** and the Planner re-plans (no non-JSON fallback is built — §4a).
-   The plan must not be ruled binding until this is observed on the real binary.
+1. **[RESOLVED 2026-06-22] Does `--json-schema` / structured output work under
+   the Claude Code *subscription* (OAuth) login, with no `ANTHROPIC_API_KEY`?**
+   **Yes.** Observed on real `claude` v2.1.185 inside a Claude Code session
+   (`CLAUDECODE=1`, `CLAUDE_CODE_*` set, no `ANTHROPIC_API_KEY`): the env-stripped
+   invocation exited 0 with `subtype: "success"`, `is_error: false`,
+   `structured_output: {"answer":"Paris"}`, and full metadata. The plan is
+   unblocked; Ruling 9 is binding. *(Not proven, and deliberately punted to
+   fail-loud operator runs: determinism on a real 20K `ARTICLE_SCHEMA` compile,
+   and the exact `error_max_structured_output_retries` failure envelope — both
+   doc-settled.)*
 2. **Confirm the CLI envelope mirrors the Agent SDK `ResultMessage`.** The SDK
    docs (and the owner-supplied error-return reference) pin the shape: `result`
    only on `success`; `structured_output` on success with `--json-schema`;
@@ -277,13 +305,15 @@ reproduce the failure and proves nothing.
   artifact, and the rule that `parse_article_json` remains authoritative.
 - **§9.3 / §9.4** — the failure-artifact pointer line; per-command construction
   with the right schema.
-- **requirements.md** — **revise REQ-039** (it currently asserts `complete()`
-  returns raw stdout; under structured output it returns the extracted field) and
-  add REQs for: (a) success-envelope extraction, (b) fail-loud-dump on any
-  non-`success` subtype / malformed envelope / non-zero exit, recording `subtype`
-  + `errors` + `stop_reason` + metadata, (c) subprocess env sanitization.
-  **No fallback-path REQ** — there is one mechanism (§4a). `ARTICLE_SCHEMA`
-  is a loose hint; **REQ-010/011 (parse_article_json authority) are unchanged.**
+- **requirements.md** — **revise REQ-039** (it asserted `complete()` returns raw
+  stdout; under structured output it returns the extracted field —
+  `structured_output` with a schema, `result` without) and add **REQ-054**
+  (subprocess env sanitization — no `CLAUDECODE`/`CLAUDE_CODE_*`) and **REQ-055**
+  (fail-loud-dump artifact on any non-`success` subtype / non-zero exit /
+  malformed-or-missing field, recording `subtype` + `errors` + `stop_reason` +
+  metadata; single-line message pointing to the artifact). **No fallback-path
+  REQ** — there is one mechanism (§4a). `ARTICLE_SCHEMA`/`ANSWER_SCHEMA` are loose
+  hints; **REQ-010/011 (parse_article_json authority) are unchanged.**
 
 ---
 
@@ -326,7 +356,11 @@ reproduce the failure and proves nothing.
 
 ## 11. Sequencing
 
-Per the owner's preference, the **Operator-role cleanup (B)** lands first (it
-protects every future bug report). Then: resolve §7 validation → write Ruling 7 →
-update contract.md + requirements.md → tester red gate → coder. This plan is not
-binding until Ruling 7 is written.
+Per the owner's preference, the **Operator-role cleanup (B)** landed first (the
+`zw` wrapper, Rulings 7 & 8 — it protects every future bug report). The §7.1
+validation is **resolved** (above) and **Ruling 9 is written and binding**;
+contract.md (§5.1/§5.6/§9.3/§9.4/§9.5) and requirements.md (REQ-039 revised +
+REQ-054/REQ-055) are updated. **Remaining:** tester red gate
+(`tests/test_m6_llm_client.py`, extending the fake-`claude`-binary seam), then
+coder (`llm.py`/`ask.py`/`cli.py`). Both happen in fresh sessions reading only the
+binding docs (tester: contract.md + requirements.md; coder: contract.md).

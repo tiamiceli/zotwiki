@@ -410,3 +410,118 @@ still-draft `docs/plan-bug2.md` ruling becomes **Ruling 9** when written.
   `claude`/Zotero/network.
 - (d) TDD: tester revises REQ-049–052 and adds REQ-053 against §11, red gate
   before the coder edits `scripts/zw`.
+
+## Ruling 9 — BUG-2 fix: structured-output LLM boundary (`--json-schema`, fail-closed)
+
+**Date:** 2026-06-22 · **Scope:** contract §5.1/new §5.6/§9.3/§9.4/§9.5,
+requirements REQ-039 (revised) + REQ-054/REQ-055, `llm.py`/`ask.py`/`cli.py`,
+`plan-bug2.md` · **Status:** binding.
+
+**1. Disposition: `ClaudeCodeLLMClient` constrains the model to schema-shaped
+JSON at the source and fails closed.** It invokes
+`claude --print --output-format json --json-schema <schema>
+--exclude-dynamic-system-prompt-sections`, reads the validated object from the
+envelope's `structured_output` on `subtype == "success"`, and hands
+`json.dumps(structured_output)` to the **unchanged, strict** `parse_article_json`
+(or the `ask` validator). This is the opposite of a tolerant/prose-extracting
+parser — the owner's constraint is that the *source* emit clean JSON, not that
+the *parser* forgive prose. On any non-`success` subtype, malformed envelope, or
+non-zero exit, it fails loud and writes a verbatim failure artifact (point 4).
+This is the full fix for BUG-2 ("occasional LLM schema errors"); it subsumes the
+nested-Claude-Code char-0 failure reported in
+`docs/user-testing/zotwiki-bug-findings1.md`.
+
+**2. Precondition resolved (was the blocking gate, `plan-bug2.md §7.1`).**
+Validated 2026-06-22 against the real `claude` (v2.1.185) **inside a Claude Code
+session** (`CLAUDECODE=1`, `CLAUDE_CODE_*` set, **no `ANTHROPIC_API_KEY`**):
+`claude --print --output-format json --json-schema <schema>
+--exclude-dynamic-system-prompt-sections` with the `CLAUDECODE`/`CLAUDE_CODE_*`
+keys stripped from the child env exited 0 and returned an envelope with
+`subtype: "success"`, `is_error: false`, a populated `structured_output`
+(`{"answer":"Paris"}`), and the full metadata (`stop_reason`, `session_id`,
+`usage`, `num_turns`, `total_cost_usd`). **Structured output works under the
+OAuth subscription login with no API key**, so the approach is viable and Ruling 2
+(no API-key backend) is preserved. *What this did not prove (kept explicit):*
+determinism on a real 20K-char `ARTICLE_SCHEMA` compile, and the exact
+`error_max_structured_output_retries` failure envelope — both are doc-settled and
+deliberately punted to the fail-loud operator runs (point 4). No further
+real-`claude` calls are warranted to finalize.
+
+**3. One mechanism, no fallback.** A single `claude` invocation (the CLI's own
+schema re-prompting is internal, not a zotwiki retry). There is **no** non-JSON
+fallback branch and **no** zotwiki-level retry. `--bare` and the Anthropic API
+SDK are rejected (both reintroduce the API-key requirement Ruling 2 removed).
+`parse_article_json` stays the sole authoritative validator/canonicalizer; the
+`--json-schema` shape is a *decoding hint* (Ruling 5 spirit), not the contract.
+`ARTICLE_SCHEMA`/`ANSWER_SCHEMA` are loose shape hints, not re-encodings of the
+full validator — REQ-010/011 (parse authority) are unchanged.
+
+**4. Fail-closed, dump-verbatim.** On any `subtype != "success"`, a
+malformed/non-object stdout, a missing extraction field, or a non-zero `claude`
+exit, `complete()` raises `ZotWikiError` (no retry) **and** writes a timestamped
+failure artifact under `dump_dir` (default `~/.zotwiki/failures/`) holding the
+exact argv, the prompt sent on stdin, the verbatim stdout envelope, stderr, the
+exit code, and the diagnostic fields present in the envelope (`subtype`,
+`errors`, `stop_reason`, and metadata). The raised message is **single-line** and
+**points to the artifact path**, preserving the §9.3 one-line-stderr invariant (a
+20K prompt + full envelope cannot go on the `error:` line). `result` is present
+only on `success`, so a failure record carries the structured fields, not raw
+prose.
+
+**5. Schema threading without touching the protocol.** `LLMClient.complete(self,
+prompt: str) -> str` is unchanged; all injected fakes are unchanged. The schema
+is supplied at construction by the command handler that knows what it produces:
+`ClaudeCodeLLMClient(output_schema: dict | None = None, *, dump_dir=None)`.
+`cli.py §9.4` constructs `compile`/`sync` with `ARTICLE_SCHEMA` (`llm.py`) and
+`ask` with `ANSWER_SCHEMA` (`ask.py`). `output_schema=None` → omit `--json-schema`
+and read `.result`. `complete()` still returns a **string**.
+
+**6. Defense-in-depth env hardening.** The child env strips `CLAUDECODE` and every
+`CLAUDE_CODE_*` key, and `--exclude-dynamic-system-prompt-sections` is always
+passed, so a nested-session invocation does not inherit conversational context.
+Unrelated env (PATH, HOME, the OAuth keychain access) is preserved. `ANTHROPIC_*`
+is **not** stripped.
+
+**7. Test-import invariant reconciled (resolves a stale CLAUDE.md line).** The
+CLAUDE.md invariant "`ClaudeCodeLLMClient` is never imported by any test" was
+already narrower in practice: the **injected-fake** suite (Compiler/CLI/`ask`,
+etc.) never imports it, but the dedicated client module
+`tests/test_m6_llm_client.py` *does* import it lazily (autouse fixture) and drives
+a **fake `claude` binary on PATH** — never the real binary, never the network.
+Ruling: that is the correct and only seam for testing `complete()`. The BUG-2
+envelope tests (REQ-039 revised, REQ-054, REQ-055) extend exactly this module and
+seam. CLAUDE.md's invariant bullet is corrected to state this precisely so the
+blind tester has unambiguous license. The injected-fake suite remains forbidden
+from importing the real client.
+
+**8. Contract changes (binding):** §5.1 (revised `ClaudeCodeLLMClient`
+description: structured-output invocation, per-command `output_schema`), **new
+§5.6** (the structured-output invocation — flags, env-strip, envelope handling,
+`structured_output`/`result` extraction, fail-loud-dump artifact, and that
+`parse_article_json` remains authoritative; `ARTICLE_SCHEMA`/`ANSWER_SCHEMA` as
+loose hints; the constructor), §9.3 (the failure message points to the artifact
+file), §9.4 (per-command construction with the right schema), §9.5 (`ask` uses
+`ANSWER_SCHEMA`).
+
+**9. Requirements (binding):** **revise REQ-039** (success-envelope extraction +
+the new flags + still-`claude not found`), **add REQ-054** (subprocess env
+sanitization — no `CLAUDECODE`/`CLAUDE_CODE_*`), **add REQ-055** (fail-closed +
+artifact dump on non-`success` subtype / non-zero exit / malformed-or-missing
+field, single-line message pointing to the artifact). No fallback-path REQ.
+
+**10. Conditions (binding):**
+- (a) `parse_article_json` and the `ask` validator are **unchanged**; they remain
+  the authoritative gate on `complete()`'s returned string.
+- (b) Stdlib only (`subprocess`, `json`, `os`, `pathlib`, `datetime`); no new
+  runtime dependency. The `LLMClient` protocol and the `main(store=, llm=)`
+  injection seam are untouched; every injected-fake test stays valid unchanged.
+- (c) Tests are hermetic via the fake-`claude`-binary-on-PATH seam of
+  `tests/test_m6_llm_client.py`; the fake emits a JSON envelope and (for REQ-054)
+  reports its received env; `dump_dir` is a `tmp_path` so the artifact is
+  observable. No real `claude`, Zotero, or network. No real-`claude` integration
+  test (determinism evidence accrues from the fail-loud operator artifacts).
+- (d) Which schema each command passes (§9.4) is contract-specified but not
+  hermetically tested (the injected-fake suite never constructs the real client);
+  REQ-039 tests that *a supplied* `output_schema` becomes `--json-schema <json>`.
+- (e) TDD: tester revises REQ-039 and adds REQ-054/REQ-055 against §5.6, commits
+  the red gate before the coder edits `llm.py`/`ask.py`/`cli.py`.
