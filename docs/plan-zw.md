@@ -10,7 +10,7 @@ gives short directives that inject `$ZOTWIKI_VAULT` and forward the rest to the
 installed `zotwiki` console script. It composes the public CLI (§9) — no new
 zotwiki behavior, no dependency, no §1–§10 change. Running from a plain terminal
 also avoids the nested-session BUG-2 corruption (`docs/user-testing/
-zotwiki-bug-findings.md`), so no env-stripping is needed.
+zotwiki-bug-findings1.md`), so no env-stripping is needed.
 
 ## Spec
 

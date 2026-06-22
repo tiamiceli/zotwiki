@@ -334,9 +334,10 @@ runtime dependency. zotwiki still reaches `claude` only via `sync`/`ask`/`compil
 
 **3. Relationship to BUG-2.** Running from a plain terminal (not nested inside a
 Claude Code session) is exactly the environment in which the nested-session LLM
-corruption (`docs/user-testing/zotwiki-bug-findings.md`) does not occur — the
+corruption (`docs/user-testing/zotwiki-bug-findings1.md`) does not occur — the
 child `claude` inherits no `CLAUDECODE`/`CLAUDE_CODE_*`. `zw` therefore needs **no**
-env-stripping and is independent of the still-draft structured-output fix. (That
+env-stripping and is independent of the structured-output fix (then draft, since
+completed in Ruling 9). (That
 draft, `docs/plan-bug2.md`, reserved "Ruling 7"; since this ruling lands first it
 takes 7 and that pending ruling renumbers to **Ruling 8**.)
 

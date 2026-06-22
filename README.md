@@ -100,10 +100,12 @@ Claude Code will run `zotwiki ask` and synthesize an answer from your pages.
 ## Operating from the terminal (`zw` directives)
 
 If you'd rather drive ZotWiki yourself from a plain terminal, `scripts/zw` gives
-short directives that fill in the long paths for you. This is also the most
-reliable way to run the LLM-backed commands: from a plain terminal there is no
-nested Claude Code session to corrupt the model's output (see
-`docs/user-testing/zotwiki-bug-findings.md`).
+short directives that fill in the long paths for you. It's a tidy way to run the
+LLM-backed commands outside a nested Claude Code session. (ZotWiki also hardens
+the LLM boundary itself — it strips nested-session environment variables and
+constrains the model to structured JSON output — so the model's output is robust
+whether you run from a plain terminal or inside a session; see
+`docs/user-testing/zotwiki-bug-findings1.md`.)
 
 Set **two** things once, then put `zw` on your `PATH`:
 

@@ -1,7 +1,7 @@
 # ZotWiki — Operator/Tester Findings for the Planner
 
 **Date:** 2026-06-19 
-**Update:** The operator now runs zotwiki from a **plain terminal** via `scripts/zw` (Ruling 8), so the nested-Claude-Code failure documented below no longer occurs in normal use. It was **avoided by workflow, not fixed in code** — `zw` adds no env-stripping; a nested invocation would still corrupt output. **BUG-2's LLM-boundary hardening (`docs/plan-bug2.md`, `--json-schema`) remains open/unimplemented.** 
+**Update (2026-06-22):** The operator now runs zotwiki from a **plain terminal** via `scripts/zw` (Ruling 8), which already avoided the nested-Claude-Code failure documented below by workflow. **BUG-2's LLM-boundary hardening (`docs/plan-bug2.md`, `--json-schema`) is now also FIXED in code (Ruling 9):** `ClaudeCodeLLMClient` strips `CLAUDECODE`/`CLAUDE_CODE_*` from the child env, passes `--exclude-dynamic-system-prompt-sections`, and constrains the model to structured JSON output — so output is robust whether zotwiki runs from a plain terminal or nested in a session. On failure it now fails closed and writes a verbatim artifact under `~/.zotwiki/failures/`. 
 Separately, `zw sync` now *succeeds* and produces a wiki, but the generated pages show **content peculiarities** (a different class of problem from the char-0 JSON failure below) — those are logged as their own findings entry, not here.
 
 **Date:** 2026-06-16

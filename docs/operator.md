@@ -131,6 +131,8 @@ Overrides the Zotero API base URL (default: `http://127.0.0.1:23119/api/users/0`
 
 On exit 1 or 2, exactly one `error: {message}\n` line is written to **stderr** (audit violations are the exception — they go to stdout as structured lines).
 
+When a `compile`, `sync`, or `ask` run fails because the LLM did not return valid structured JSON, ZotWiki **fails closed** and writes the full exchange — the exact `claude` invocation, the prompt it sent, and the raw response/envelope — to a timestamped file under `~/.zotwiki/failures/`. The `error:` line names that file; open it to see exactly what the model returned.
+
 ---
 
 ## Vault layout

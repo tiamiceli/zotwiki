@@ -1,6 +1,10 @@
 # plan-bug2 — Structured-output LLM boundary (BUG-2)
 
-**Status:** AUTHORIZED by **Ruling 9** (2026-06-22). The blocking precondition
+**Status:** COMPLETE (2026-06-22). Authorized by **Ruling 9**; the tester red
+gate (`tests/test_m6_llm_client.py`, REQ-039 revised + REQ-054/REQ-055) and the
+coder implementation (`llm.py`/`ask.py`/`cli.py`) have both landed and the suite
+is green (418 passed, 1 failed — the known macOS `test_req_019` only). The
+blocking precondition
 (§7.1 — does structured output work under the Claude Code OAuth login?) was
 **resolved 2026-06-22**: validated against real `claude` v2.1.185 inside a Claude
 Code session with **no `ANTHROPIC_API_KEY`** —
@@ -32,7 +36,7 @@ requested for the tester.
 **Relationship to prior work:** BUG-2 was opened in `plan-v1.2.md` ("LLM
 sometimes produces invalid claim schema") and classified **mitigated (not fully
 fixed)** via prompt refactors. The 2026-06-16 operator findings
-(`docs/user-testing/zotwiki-bug-findings.md`) found the dominant, reproducible
+(`docs/user-testing/zotwiki-bug-findings1.md`) found the dominant, reproducible
 failure mode and its root cause. This plan is the full fix. It is **independent
 of** the Operator-role cleanup (the "B" discussion); that role work removes the
 nested-session *trigger*, while this plan fixes the *boundary* so zotwiki is
@@ -360,7 +364,8 @@ Per the owner's preference, the **Operator-role cleanup (B)** landed first (the
 `zw` wrapper, Rulings 7 & 8 — it protects every future bug report). The §7.1
 validation is **resolved** (above) and **Ruling 9 is written and binding**;
 contract.md (§5.1/§5.6/§9.3/§9.4/§9.5) and requirements.md (REQ-039 revised +
-REQ-054/REQ-055) are updated. **Remaining:** tester red gate
-(`tests/test_m6_llm_client.py`, extending the fake-`claude`-binary seam), then
-coder (`llm.py`/`ask.py`/`cli.py`). Both happen in fresh sessions reading only the
-binding docs (tester: contract.md + requirements.md; coder: contract.md).
+REQ-054/REQ-055) are updated. **Done:** the tester red gate
+(`tests/test_m6_llm_client.py`, extending the fake-`claude`-binary seam) and the
+coder (`llm.py`/`ask.py`/`cli.py`) both landed in fresh sessions reading only the
+binding docs (tester: contract.md + requirements.md; coder: contract.md). The
+suite is green (418 passed, 1 failed — the known macOS `test_req_019` only).

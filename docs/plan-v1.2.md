@@ -1,7 +1,7 @@
 # plan-v1.2 — Fulltext child-attachment fallback (REQ-045)
 
 **Authorized by:** Ruling 4 (2026-06-14); compact-embed rule by Ruling 5 (2026-06-15)
-**Status:** Phase A + B complete; BUG-1 pending (needs ruling), BUG-2 mitigated
+**Status:** Phase A + B complete; BUG-1 fixed (Ruling 6, `plan-bug1.md`); BUG-2 fixed (Ruling 9, `plan-bug2.md`)
 
 ---
 
@@ -206,5 +206,7 @@ are significantly reduced but may still occur occasionally on complex papers.
 shape example from the real `Article`/`Claim`/`Quote`/`Section` dataclasses (so
 it cannot drift from `parse_article_json`), B2 derives an explicit citekey
 charset rule from `llm._CITEKEY_RE`, and B5 adds a concrete `Contradiction`
-JSON example to the update prompt. BUG-2 remains classified **mitigated (not
-fully fixed)**: residual schema errors are still possible on complex papers.
+JSON example to the update prompt. BUG-2 was classified **mitigated (not
+fully fixed)** at v1.2: residual schema errors were still possible on complex
+papers. **(Since fully fixed by Ruling 9 / `plan-bug2.md` — the structured-output
+LLM boundary constrains the model to schema-shaped JSON and fails closed.)**

@@ -62,7 +62,7 @@ Proof:
 
 **Real conclusion (corrected):** The breakage is driven by the **full Claude Code session environment** (`CLAUDECODE` + dynamic system prompt) leaking into the nested `claude`, which then answers in *prose*. With the env stripped, the end-to-end pass rate is high (3/3 here; one real clean-env `sync` still failed once = residual nondeterminism, ~BUG-2). So: **nested + full env ≈ reliably broken; clean env ≈ reliably works.** Running from a **plain terminal outside Claude Code** (clean env by default) is the reliable operator path today.
 
-➡️ **Full write-up for the Planner: see `zotwiki-bug-findings.md`** (root cause, evidence table, `claude` CLI fix levers like `--json-schema` / `--output-format json` / `--exclude-dynamic-system-prompt-sections`, and open questions).
+➡️ **Full write-up for the Planner: see `zotwiki-bug-findings1.md`** (root cause, evidence table, `claude` CLI fix levers like `--json-schema` / `--output-format json` / `--exclude-dynamic-system-prompt-sections`, and open questions).
 
 ---
 _Legend: ✅ success · ⚠️ warning/blocker · ❌ failure. Maintained by Claude Code (operator)._
