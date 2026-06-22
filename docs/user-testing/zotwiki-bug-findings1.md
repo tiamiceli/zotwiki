@@ -1,5 +1,9 @@
 # ZotWiki — Operator/Tester Findings for the Planner
 
+**Date:** 2026-06-19 
+**Update:** The operator now runs zotwiki from a **plain terminal** via `scripts/zw` (Ruling 8), so the nested-Claude-Code failure documented below no longer occurs in normal use. It was **avoided by workflow, not fixed in code** — `zw` adds no env-stripping; a nested invocation would still corrupt output. **BUG-2's LLM-boundary hardening (`docs/plan-bug2.md`, `--json-schema`) remains open/unimplemented.** 
+Separately, `zw sync` now *succeeds* and produces a wiki, but the generated pages show **content peculiarities** (a different class of problem from the char-0 JSON failure below) — those are logged as their own findings entry, not here.
+
 **Date:** 2026-06-16
 **Role:** Operating zotwiki as a tool (driving it, not developing it) from *inside* a Claude Code session.
 **Goal at the time:** Populate the `Test` wiki by syncing the Zotero `Test` collection (1 paper: Ackoff, *From Data to Wisdom*, citekey `ackoffDataWisdomPresidential1989`, key `FET24BAZ`).
